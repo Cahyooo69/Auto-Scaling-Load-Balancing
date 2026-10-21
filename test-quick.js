@@ -28,7 +28,7 @@ async function sendBuyRequest(id) {
     );
 
     req.on('error', (err) => {
-      resolve({ id, status: 'ERROR', error: err.message });
+      resolve({ id, status: 'ERROR', duration: Date.now() - start, error: err.message });
     });
 
     req.write(JSON.stringify({ userId: `quick_user_${id}` }));
@@ -49,6 +49,7 @@ async function run() {
       ServedBy: r.body?.servedBy || 'N/A',
       Remaining: r.body?.remainingStock ?? 'N/A',
       Success: r.body?.success ?? false,
+      Info: r.error || (r.body?.message ?? 'OK'),
     }))
   );
 
