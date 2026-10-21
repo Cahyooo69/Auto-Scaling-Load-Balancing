@@ -1,0 +1,14 @@
+{
+  "name": "war-tiket-api",
+  "version": "1.0.0",
+  "description": "Mock API War Tiket Konser Musik dengan Redis Atomic Locking",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1"
+  }
+}
