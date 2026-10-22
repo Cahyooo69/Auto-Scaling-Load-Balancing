@@ -35,20 +35,50 @@
       margin: 0 0 8px 0;
       font-weight: 600;
     }
-    .meta-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 8px;
-      font-size: 9.5pt;
+    .project-info-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0 16px 0;
+      font-size: 9pt;
     }
-    .meta-table td {
-      padding: 3px 6px;
-      vertical-align: top;
+    .info-row {
+      display: flex;
+      margin-bottom: 6px;
     }
-    .meta-label {
+    .info-grid-2 {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .info-col {
+      display: flex;
+      width: 49%;
+    }
+    .info-label {
       font-weight: bold;
-      width: 130px;
       color: #4a5568;
+      min-width: 95px;
+      flex-shrink: 0;
+    }
+    .info-value {
+      color: #2d3748;
+    }
+    .team-section {
+      margin-top: 4px;
+    }
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 24px;
+      margin-top: 5px;
+    }
+    .member-item {
+      color: #2d3748;
+      white-space: nowrap;
     }
     h2.section-title {
       font-size: 11.5pt;
@@ -170,43 +200,42 @@
 
   <!-- HALAMAN 1 -->
   <div class="header">
-    <h1>Laporan Progres Tugas Besar Cloud Computing</h1>
-    <h2>Pertemuan 1: Planning & Architecture Design</h2>
-    <table class="meta-table">
-      <tr>
-        <td class="meta-label">Topik Proyek:</td>
-        <td><strong>Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm</strong></td>
-        <td class="meta-label">Mata Kuliah:</td>
-        <td>Cloud Computing (3 SKS)</td>
-      </tr>
-      <tr>
-        <td class="meta-label">Kelompok:</td>
-        <td><strong>Kelompok 1</strong></td>
-        <td class="meta-label">Repositori Git:</td>
-        <td><a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing" style="color: #2b6cb0; text-decoration: none;">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a></td>
-      </tr>
-      <tr>
-        <td class="meta-label">Anggota Tim:</td>
-        <td colspan="3" style="padding-top: 4px; padding-bottom: 4px;">
-          <table style="width: 100%; border: none; font-size: 9pt; border-collapse: collapse;">
-            <tr>
-              <td style="padding: 2px 0; border: none; width: 50%;">&bull; <strong>Muhammad Ilham Nurcahyo</strong> (09040623063)</td>
-              <td style="padding: 2px 0; border: none; width: 50%;">&bull; <strong>Muhammad Daud Rizaldiansyah</strong> (09040623061)</td>
-            </tr>
-            <tr>
-              <td style="padding: 2px 0; border: none; width: 50%;">&bull; <strong>Hafid Aji Fauzan</strong> (0920623027)</td>
-              <td style="padding: 2px 0; border: none; width: 50%;">&bull; <strong>Davin Aryaguna Hermansyah</strong> (09020623020)</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-      <tr>
-        <td class="meta-label">Studi Kasus:</td>
-        <td>Sistem War Tiket Konser Musik (Flash Crowd)</td>
-        <td class="meta-label">Tanggal Progres:</td>
-        <td>22 Oktober 2026</td>
-      </tr>
-    </table>
+    <div style="border-bottom: 2px solid #1a365d; padding-bottom: 8px; margin-bottom: 12px;">
+      <h1 style="font-size: 15pt; color: #1a365d; margin: 0 0 3px 0; text-transform: uppercase; letter-spacing: 0.5px;">Laporan Progres Tugas Besar Cloud Computing</h1>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <h2 style="font-size: 11.5pt; color: #2b6cb0; margin: 0; font-weight: 600;">Pertemuan 1: Planning & Architecture Design</h2>
+        <span style="font-size: 8.5pt; color: #718096; font-weight: 500;">Mata Kuliah: Cloud Computing (3 SKS) &bull; 22 Oktober 2026</span>
+      </div>
+    </div>
+
+    <div class="project-info-card">
+      <div class="info-row">
+        <span class="info-label">Topik Proyek:</span>
+        <span class="info-value"><strong>Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm</strong></span>
+      </div>
+      <div class="info-grid-2">
+        <div class="info-col">
+          <span class="info-label">Studi Kasus:</span>
+          <span class="info-value">Sistem War Tiket Konser Musik (Flash Crowd)</span>
+        </div>
+        <div class="info-col">
+          <span class="info-label">Repositori Git:</span>
+          <span class="info-value"><a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing" style="color: #2b6cb0; text-decoration: none;">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a></span>
+        </div>
+      </div>
+      <div class="team-section">
+        <div>
+          <span class="info-label">Kelompok:</span>
+          <span class="info-value"><strong>Kelompok 1</strong> &mdash; <em>Anggota Tim:</em></span>
+        </div>
+        <div class="team-grid">
+          <div class="member-item">&bull; <strong>Muhammad Ilham Nurcahyo</strong> (09040623063)</div>
+          <div class="member-item">&bull; <strong>Muhammad Daud Rizaldiansyah</strong> (09040623061)</div>
+          <div class="member-item">&bull; <strong>Hafid Aji Fauzan</strong> (0920623027)</div>
+          <div class="member-item">&bull; <strong>Davin Aryaguna Hermansyah</strong> (09020623020)</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <h2 class="section-title">1. Latar Belakang & Problem Statement</h2>
