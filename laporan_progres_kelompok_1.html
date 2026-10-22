@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Progres Pertemuan 1 - Kelompok 1 Cloud Computing</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 15mm 18mm 15mm;
+    }
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      border-bottom: 2.5px solid #1a365d;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .header h1 {
+      font-size: 16pt;
+      color: #1a365d;
+      margin: 0 0 4px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header h2 {
+      font-size: 12pt;
+      color: #2b6cb0;
+      margin: 0 0 8px 0;
+      font-weight: 600;
+    }
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 9.5pt;
+    }
+    .meta-table td {
+      padding: 3px 6px;
+      vertical-align: top;
+    }
+    .meta-label {
+      font-weight: bold;
+      width: 130px;
+      color: #4a5568;
+    }
+    h2.section-title {
+      font-size: 11.5pt;
+      color: #1a365d;
+      border-left: 4px solid #3182ce;
+      padding-left: 8px;
+      margin: 16px 0 8px 0;
+      text-transform: uppercase;
+    }
+    p {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+    ul, ol {
+      margin: 0 0 8px 0;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    table.content-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 14px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+    table.content-table th {
+      background-color: #2b6cb0;
+      color: #ffffff;
+      padding: 6px 8px;
+      text-align: left;
+      border: 1px solid #cbd5e0;
+      font-weight: 600;
+    }
+    table.content-table td {
+      padding: 5px 8px;
+      border: 1px solid #cbd5e0;
+    }
+    table.content-table tr:nth-child(even) {
+      background-color: #f7fafc;
+    }
+    .callout {
+      background-color: #ebf8ff;
+      border-left: 4px solid #3182ce;
+      padding: 8px 12px;
+      margin: 10px 0;
+      font-size: 9.5pt;
+      border-radius: 0 4px 4px 0;
+    }
+    .code-box {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 8.5pt;
+      margin: 8px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      page-break-inside: avoid;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 8pt;
+      font-weight: bold;
+      color: white;
+      background-color: #38a169;
+    }
+    .badge-limit {
+      background-color: #d69e2e;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: right;
+      font-size: 8pt;
+      color: #718096;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 4px;
+    }
+    .diagram-container {
+      background: #f8fafc;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      margin: 8px 0 12px 0;
+      page-break-inside: avoid;
+    }
+    .box-tier {
+      display: inline-block;
+      border: 1.5px solid #2b6cb0;
+      background: #ebf8ff;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 3px;
+      font-size: 8.5pt;
+      text-align: left;
+      vertical-align: top;
+      width: 29%;
+      box-sizing: border-box;
+    }
+    .box-tier strong {
+      color: #1a365d;
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HALAMAN 1 -->
+  <div class="header">
+    <h1>Laporan Progres Tugas Besar Cloud Computing</h1>
+    <h2>Pertemuan 1: Planning & Architecture Design</h2>
+    <table class="meta-table">
+      <tr>
+        <td class="meta-label">Topik Proyek:</td>
+        <td><strong>Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm</strong></td>
+        <td class="meta-label">Mata Kuliah:</td>
+        <td>Cloud Computing (3 SKS)</td>
+      </tr>
+      <tr>
+        <td class="meta-label">Kelompok:</td>
+        <td>Kelompok 1</td>
+        <td class="meta-label">Repositori Git:</td>
+        <td><a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing" style="color: #2b6cb0; text-decoration: none;">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a></td>
+      </tr>
+      <tr>
+        <td class="meta-label">Studi Kasus:</td>
+        <td>Sistem War Tiket Konser Musik (Flash Crowd Traffic)</td>
+        <td class="meta-label">Tanggal Progres:</td>
+        <td>22 Oktober 2026</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2 class="section-title">1. Latar Belakang & Problem Statement</h2>
+  <p>
+    Sistem <em>War Tiket</em> menghadapi tantangan komputasi awan yang unik karena karakteristik beban trafik berupa <strong>flash crowd</strong>, di mana ribuan pengguna mengakses dan melakukan transaksi <em>checkout</em> tiket secara simultan dalam detik yang sama. Permasalahan kritis yang sering timbul pada arsitektur konvensional meliputi:
+  </p>
+  <ul>
+    <li><strong>Server Crash & Out of Memory (OOM):</strong> Lonjakan koneksi simultan membuat server tunggal kehabisan alokasi thread kerja dan memori heap.</li>
+    <li><strong>Race Condition & Overselling:</strong> Transaksi konkuren membaca sisa kuota yang sama sebelum diperbarui di basis data, berakibat tiket terjual melebihi kapasitas riil (*oversold*).</li>
+    <li><strong>Single Point of Failure (SPOF):</strong> Tidak adanya replika cadangan yang menyebabkan seluruh sistem mati total saat satu worker mengalami kegagalan proses.</li>
+  </ul>
+  <p>
+    Sesuai ketentuan teknis standar mata kuliah Cloud Computing (3 SKS), seluruh komponen dibatasi secara ketat pada <code>cpus: '0.25'</code> (maksimal 25% dari 1 core CPU) dan <code>memory: 256M</code> (maksimal RAM 256 MB) agar kompatibel dan stabil diuji di lingkungan laptop.
+  </p>
+
+  <div class="callout">
+    <strong>Tujuan Utama Proyek Kelompok 1:</strong>
+    <ol style="margin: 4px 0 0 0; padding-left: 18px;">
+      <li>Membangun arsitektur <em>microservice</em> terorkestrasi Docker Swarm dengan <em>reverse proxy</em> Nginx pada port 80.</li>
+      <li>Menerapkan skalasi elastis worker Node.js dari 2 hingga 8 replika untuk meredam lonjakan trafik puncak.</li>
+      <li>Mengeliminasi <em>race condition</em> secara mutlak (0% overselling) menggunakan Redis in-memory atomic Lua scripting.</li>
+      <li>Menjamin sistem memenuhi target SLA: waktu tanggap &lt; 200 ms dan tingkat kegagalan (<em>error rate</em>) &lt; 1%.</li>
+    </ol>
+  </div>
+
+  <!-- HALAMAN 2 -->
+  <div class="page-break"></div>
+
+  <h2 class="section-title">2. Arsitektur Sistem & Spesifikasi Komponen (3-Tier)</h2>
+  <p>
+    Arsitektur sistem dirancang menggunakan model 3-Tier yang terorkestrasi di dalam Docker Swarm Overlay Network:
+  </p>
+
+  <div class="diagram-container">
+    <div style="margin-bottom: 8px; font-weight: bold; color: #1a365d; font-size: 9.5pt;">
+      Trafik Klien / 1000 VU Load Testing (k6) &rarr; HTTP Port 80
+    </div>
+    <div class="box-tier">
+      <strong>1. Ingress Layer (Nginx)</strong>
+      &bull; Reverse Proxy & Ingress LB<br>
+      &bull; Port Publik: <code>80:80</code><br>
+      &bull; Dynamic DNS <code>127.0.0.11</code><br>
+      &bull; Failover Retries: <code>http_502</code><br>
+      &bull; Limit: 0.25 CPU | 256M RAM
+    </div>
+    <div class="box-tier">
+      <strong>2. Application Layer (App)</strong>
+      &bull; Node.js Mock API Worker<br>
+      &bull; Dynamic Scale: <strong>2 &rarr; 8 Replika</strong><br>
+      &bull; Artificial Delay: 50&ndash;100ms<br>
+      &bull; Service VIP: <code>app:3000</code><br>
+      &bull; Limit: 0.25 CPU | 256M RAM
+    </div>
+    <div class="box-tier">
+      <strong>3. State Layer (Redis)</strong>
+      &bull; Redis In-Memory Store<br>
+      &bull; <strong>Atomic Lua Scripting</strong><br>
+      &bull; Zero Race Condition / Oversell<br>
+      &bull; Stok Awal: 1.000 Tiket<br>
+      &bull; Limit: 0.25 CPU | 256M RAM
+    </div>
+  </div>
+
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Komponen</th>
+        <th>Container / Service</th>
+        <th>Port Jaringan</th>
+        <th>Batasan Sumber Daya</th>
+        <th>Peran & Logika Utama</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Load Balancer</strong></td>
+        <td><code>wartiket_nginx</code></td>
+        <td><code>80:80</code> (Publik)</td>
+        <td><span class="badge badge-limit">CPU: 0.25 | RAM: 256M</span></td>
+        <td>Gerbang masuk HTTP, membagi beban ke seluruh replika worker via Swarm Routing Mesh, serta failover otomatis.</td>
+      </tr>
+      <tr>
+        <td><strong>Backend API</strong></td>
+        <td><code>wartiket_app</code></td>
+        <td><code>3000</code> (Internal)</td>
+        <td><span class="badge badge-limit">CPU: 0.25 | RAM: 256M</span></td>
+        <td>Node.js API pemroses checkout dengan simulasi penundaan buatan 50–100ms. Dikonfigurasi 2 hingga 8 replika elastis.</td>
+      </tr>
+      <tr>
+        <td><strong>State Store</strong></td>
+        <td><code>wartiket_redis</code></td>
+        <td><code>6379</code> (Internal)</td>
+        <td><span class="badge badge-limit">CPU: 0.25 | RAM: 256M</span></td>
+        <td>Menjalankan Lua Script atomik (<code>DECR</code>) untuk evaluasi dan pengurangan stok dalam single-thread Redis.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">3. Skema Jaringan & Keamanan Isolasi Docker</h2>
+  <p>
+    Sistem menggunakan <strong>Docker Overlay Network</strong> bernama <code>wartiket-net</code> berkonfigurasi <code>attachable: true</code>. Karakteristik isolasi jaringan:
+  </p>
+  <ul>
+    <li><strong>Prinsip Least Privilege:</strong> Hanya container Nginx yang mengekspos port ke luar host (Port 80). Layanan backend (<code>app:3000</code>) dan basis data in-memory (<code>redis:6379</code>) sepenuhnya terisolasi dan hanya dapat diakses melalui jaringan internal.</li>
+    <li><strong>Service Discovery & Virtual IP (VIP):</strong> Docker Swarm menyediakan Virtual IP internal dan IPVS yang mendistribusikan request dari Nginx ke seluruh replika container yang sehat secara transparan.</li>
+    <li><strong>Failover Resiliency:</strong> Nginx dikonfigurasi dengan <code>proxy_next_upstream error timeout http_502 http_503;</code> sehingga jika salah satu worker mati mendadak, request otomatis dialihkan ke replika lain tanpa kegagalan transaksi (<em>zero-downtime</em>).</li>
+  </ul>
+
+  <!-- HALAMAN 3 -->
+  <div class="page-break"></div>
+
+  <h2 class="section-title">4. Bukti Hasil Pengujian Klaster (Live Test Execution)</h2>
+  <p>
+    Seluruh klaster telah berhasil di-deploy pada lingkungan Docker Swarm dan diuji secara riil menggunakan skrip pengujian transaksi konkuren (<code>node test-quick.js</code>).
+  </p>
+
+  <div class="callout">
+    <strong>Hasil Verifikasi Distribusi Beban (20 Transaksi Simultan pada 2 Replika):</strong>
+  </div>
+
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Request ID</th>
+        <th>HTTP Status</th>
+        <th>Waktu Tanggap (Latency)</th>
+        <th>Dilayani Oleh (Container ID)</th>
+        <th>Sisa Stok Tiket</th>
+        <th>Hasil Transaksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Req #1</td><td><span class="badge">200 OK</span></td><td>136 ms</td><td><code>f4f65236a1e3</code></td><td>998</td><td>Sukses didapatkan</td></tr>
+      <tr><td>Req #2</td><td><span class="badge">200 OK</span></td><td>113 ms</td><td><code>ef692274a58a</code></td><td>996</td><td>Sukses didapatkan</td></tr>
+      <tr><td>Req #3</td><td><span class="badge">200 OK</span></td><td>112 ms</td><td><code>ef692274a58a</code></td><td>997</td><td>Sukses didapatkan</td></tr>
+      <tr><td>Req #4</td><td><span class="badge">200 OK</span></td><td>126 ms</td><td><code>ef692274a58a</code></td><td>989</td><td>Sukses didapatkan</td></tr>
+      <tr><td>Req #5</td><td><span class="badge">200 OK</span></td><td>116 ms</td><td><code>f4f65236a1e3</code></td><td>993</td><td>Sukses didapatkan</td></tr>
+      <tr><td>Req #6..20</td><td><span class="badge">200 OK</span></td><td>Rata-rata 118 ms</td><td>Bergantian seimbang</td><td>Tereduksi atomik</td><td>100% Sukses</td></tr>
+    </tbody>
+  </table>
+
+  <table class="content-table" style="width: 60%; margin: 0 auto 12px auto;">
+    <thead>
+      <tr>
+        <th>Container Host ID</th>
+        <th>Jumlah Request Dilayani</th>
+        <th>Rasio Distribusi Beban</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>f4f65236a1e3</code> (Replika 1)</td><td>10 Request</td><td><strong>50.0%</strong></td></tr>
+      <tr><td><code>ef692274a58a</code> (Replika 2)</td><td>10 Request</td><td><strong>50.0%</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Analisis Hasil Pengujian:</strong>
+    <ol style="margin: 4px 0 0 0; padding-left: 18px;">
+      <li><strong>Pencapaian SLA:</strong> Waktu respon rata-rata adalah <strong>~118 ms</strong>, memenuhi target SLA yang ditetapkan yaitu &lt; 200 ms dengan <em>failure rate</em> 0%.</li>
+      <li><strong>Distribusi Sempurna:</strong> Nginx bersama Swarm IPVS membagi beban transaksi secara presisi <strong>50:50</strong>.</li>
+      <li><strong>Konsistensi Atomik:</strong> Berkat Redis Lua Scripting, sisa stok tiket berkurang tanpa ada tabrakan nilai (<em>zero race condition</em>).</li>
+    </ol>
+  </div>
+
+  <!-- HALAMAN 4 -->
+  <div class="page-break"></div>
+
+  <h2 class="section-title">5. Pengujian Skalasi Dinamis (Dynamic Auto-Scaling 2 &rarr; 8 Replika)</h2>
+  <p>
+    Skalasi dilakukan secara <em>on-the-fly</em> menggunakan perintah: <code>docker service scale wartiket_app=8</code>. Dalam hitungan <strong>2.8 detik</strong>, Docker Swarm berhasil mengonvergensi 6 replika baru.
+  </p>
+  <div class="code-box">
+$ docker service scale wartiket_app=8
+wartiket_app scaled to 8
+overall progress: 8 out of 8 tasks
+verify: Service wartiket_app converged
+
+--- Hasil Distribusi Beban Pasca Skalasi (20 Request Simultan) ---
+Container: 31a7f42dc2cf -> 3 req    Container: 42eb054b1b97 -> 2 req
+Container: 791d770ee663 -> 3 req    Container: 2ffac81c244d -> 2 req
+Container: f4632e7ce807 -> 3 req    Container: ef692274a58a -> 2 req
+Container: c4117f09dc62 -> 3 req    Container: f4f65236a1e3 -> 2 req
+Status: 200 OK (100% Success) | Beban terbagi merata ke seluruh 8 container aktif!
+  </div>
+
+  <h2 class="section-title">6. Pemenuhan Target Luaran Mingguan</h2>
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Target Luaran Pertemuan 1</th>
+        <th>Status Capaian</th>
+        <th>Keterangan Verifikasi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Diagram Arsitektur Sistem</td>
+        <td><span class="badge">Selesai 100%</span></td>
+        <td>Terdokumentasi pada diagram Mermaid di berkas <code>README.md</code>.</td>
+      </tr>
+      <tr>
+        <td>Skema Jaringan Internal Docker</td>
+        <td><span class="badge">Selesai 100%</span></td>
+        <td>Docker Overlay Network <code>wartiket-net</code> dengan isolasi port backend & redis.</td>
+      </tr>
+      <tr>
+        <td>Spesifikasi <code>docker-compose.yml</code> Awal</td>
+        <td><span class="badge">Selesai 100%</span></td>
+        <td>Penerapan batas ketat <code>cpus: '0.25'</code> dan <code>memory: 256M</code>.</td>
+      </tr>
+      <tr>
+        <td>Repositori Git Kelompok</td>
+        <td><span class="badge">Selesai 100%</span></td>
+        <td>Aktif di <a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a>.</td>
+      </tr>
+      <tr>
+        <td>Deployment & Live Demo (Bonus Luaran Pertemuan 2)</td>
+        <td><span class="badge">Selesai 100%</span></td>
+        <td>Klaster sudah <em>up & running</em>, teruji load balancing dan auto-scaling 2 &rarr; 8 replika.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Laporan Progres Kelompok 1 &bull; Cloud Computing 3 SKS &bull; Halaman Dokumen
+  </div>
+
+</body>
+</html>
