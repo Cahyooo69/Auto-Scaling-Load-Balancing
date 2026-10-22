@@ -3,6 +3,11 @@
 > **Tugas Besar Mata Kuliah Cloud Computing (3 SKS)**  
 > **Studi Kasus:** Sistem War Tiket Konser Musik  
 > **Kelompok:** 1  
+> **Anggota Tim:**  
+> - Muhammad Ilham Nurcahyo  
+> - Hafid Aji Fauzan (0920623027)  
+> - Muhammad Daud Rizaldiansyah (09040623061)  
+> - Davin Aryaguna Hermansyah (09020623020)  
 
 ---
 
