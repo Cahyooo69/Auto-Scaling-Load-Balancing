@@ -1,0 +1,115 @@
+================================================================================
+          DAFTAR PERINTAH TERMINAL - DOCKER SWARM WAR TIKET (KELOMPOK 1)
+   Studi Kasus: Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Swarm
+================================================================================
+
+CATATAN PENTING:
+- Jalankan PowerShell di folder: 
+  "D:\Kuliah\Kuliah\SEMESTER 7\Cloud Computing\Auto-Scaling & Load Balancing"
+- Pastikan Docker Desktop sudah aktif (Engine running).
+
+--------------------------------------------------------------------------------
+1. PENGECEKAN STATUS KLASTER
+--------------------------------------------------------------------------------
+
+[1.1] Melihat Ringkasan Status 3 Service (Nginx, App, Redis)
+Perintah : docker stack services wartiket
+Fungsi   : Menampilkan service yang aktif, image, port, dan jumlah replika (misal: 2/2).
+
+[1.2] Melihat Daftar Semua Container Fisik yang Sedang Berjalan
+Perintah : docker stack ps wartiket
+Fungsi   : Menampilkan detail setiap container worker, node penempatan, dan status (Running).
+
+[1.3] Melihat Semua Container Aktif di Docker Host
+Perintah : docker ps
+Fungsi   : Menampilkan ID container fisik, status uptime, dan port mapping.
+
+
+--------------------------------------------------------------------------------
+2. PENGUJIAN TRANSAKSI & LOAD BALANCING
+--------------------------------------------------------------------------------
+
+[2.1] Uji 1 Transaksi Checkout Tiket (Manual)
+Perintah : Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/buy"
+Fungsi   : Membeli 1 tiket. Menampilkan JSON status: 200 OK, sisa stok, dan ID container pemroses.
+
+[2.2] Uji 20 Transaksi Konkuren & Bukti Distribusi Load Balancing (Rekomendasi Demo)
+Perintah : node test-quick.js
+Fungsi   : Menembak 20 request bersamaan ke Port 80 Nginx. Menampilkan tabel visual latency
+           dan pembagian beban rata 50:50 (10 di container A, 10 di container B).
+
+[2.3] Cek Sisa Kuota Stok Tiket di Redis
+Perintah : Invoke-RestMethod -Uri "http://localhost/tickets"
+Fungsi   : Menampilkan jumlah sisa stok tiket saat ini tanpa melakukan pembelian.
+
+[2.4] Reset Kuota Stok Tiket Kembali ke 1.000 Tiket
+Perintah : Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 1000}'
+Fungsi   : Mereset stok tiket di Redis kembali ke 1.000 (jalankan sebelum/setelah sesi demo).
+
+
+--------------------------------------------------------------------------------
+3. PENGUJIAN SKALASI DINAMIS (DYNAMIC AUTO-SCALING 2 -> 8 REPLIKA)
+--------------------------------------------------------------------------------
+
+[3.1] Melipatgandakan Worker dari 2 Menjadi 8 Replika Secara Instan
+Perintah : docker service scale wartiket_app=8
+Fungsi   : Menambah 6 container worker baru dalam waktu 2 detik tanpa perlu me-restart sistem.
+
+[3.2] Verifikasi Seluruh 8 Replika Telah Siap Menerima Trafik
+Perintah : docker service ps wartiket_app
+Fungsi   : Memastikan seluruh 8 task container berstatus "Running".
+
+[3.3] Uji Distribusi Beban ke 8 Replika
+Perintah : node test-quick.js
+Fungsi   : Membuktikan bahwa 20 request kini terbagi merata ke seluruh 8 container berbeda.
+
+[3.4] Mengembalikan Replika Worker ke 2 Container (Scale Down)
+Perintah : docker service scale wartiket_app=2
+Fungsi   : Menurunkan kapasitas worker setelah lonjakan trafik war tiket mereda.
+
+
+--------------------------------------------------------------------------------
+4. PENGUJIAN KETAHANAN SISTEM (DISASTER RECOVERY & FAIL-SAFE)
+--------------------------------------------------------------------------------
+
+[4.1] Demo Otomatis Ketahanan Basis Data Redis (Sangat Disukai Dosen)
+Perintah : node test-failover-demo.js
+Fungsi   : Menjalankan 5 skenario otomatis:
+           1. Cek kondisi normal (Status 200).
+           2. Mematikan Redis secara paksa.
+           3. Buktikan transaksi DITOLAK AMAN dengan HTTP 500 (mencegah overselling).
+           4. Docker Swarm membangkitkan kembali Redis (Auto-Recovery).
+           5. Transaksi normal kembali tanpa perlu restart backend (Auto-Reconnect).
+
+[4.2] Matikan Redis Secara Manual (Simulasi Crash)
+Perintah : docker service scale wartiket_redis=0
+Fungsi   : Mematikan seluruh instance Redis untuk menguji respon fail-safe backend.
+
+[4.3] Hidupkan Kembali Redis Secara Manual
+Perintah : docker service scale wartiket_redis=1
+Fungsi   : Menghidupkan kembali Redis; data stok tetap utuh berkat volume persistence.
+
+[4.4] Bunuh 1 Container Worker Backend Secara Paksa (Uji Failover Nginx)
+Perintah : docker rm -f $(docker ps -q -f name=wartiket_app | Select-Object -First 1)
+Fungsi   : Mematikan paksa salah satu worker. Nginx otomatis mengalihkan request ke replika
+           lain tanpa error 502 (zero downtime failover).
+
+
+--------------------------------------------------------------------------------
+5. PENGELOLAAN SIKLUS HIDUP STACK DOCKER SWARM
+--------------------------------------------------------------------------------
+
+[5.1] Build Ulang Image Backend & Nginx
+Perintah : docker build -t wartiket-app:latest ./app
+           docker build -t wartiket-nginx:latest ./nginx
+Fungsi   : Memperbarui image jika ada perubahan script atau konfigurasi.
+
+[5.2] Deploy / Update Stack ke Docker Swarm
+Perintah : docker stack deploy -c docker-compose.yml wartiket
+Fungsi   : Menjalankan atau menerapkan pembaruan stack ke Docker Swarm.
+
+[5.3] Menghapus Seluruh Stack dari Docker Swarm
+Perintah : docker stack rm wartiket
+Fungsi   : Menghapus seluruh container, service, dan overlay network jika ingin dibersihkan.
+
+================================================================================
