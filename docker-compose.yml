@@ -4,7 +4,9 @@ services:
   # Redis: In-memory store for atomic ticket locking & inventory management
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
     networks:
       - wartiket-net
     deploy:
@@ -81,3 +83,6 @@ networks:
   wartiket-net:
     driver: overlay
     attachable: true
+
+volumes:
+  redis-data:

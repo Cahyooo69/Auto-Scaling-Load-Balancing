@@ -15,8 +15,9 @@ const INITIAL_STOCK = parseInt(process.env.INITIAL_STOCK || '1000', 10);
 const redis = new Redis({
   host: REDIS_HOST,
   port: REDIS_PORT,
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => Math.min(times * 50, 2000),
+  enableOfflineQueue: false, // Throw error immediately when Redis is disconnected
+  maxRetriesPerRequest: 1,
+  retryStrategy: (times) => Math.min(times * 100, 2000),
   lazyConnect: true
 });
 
@@ -38,6 +39,17 @@ redis.defineCommand('atomicBuyTicket', {
 
 redis.on('error', (err) => {
   // Suppress unhandled crash on connection attempts
+});
+
+redis.on('ready', async () => {
+  try {
+    const res = await redis.set(TICKET_KEY, INITIAL_STOCK, 'NX');
+    if (res === 'OK') {
+      console.log(`Initialized ticket stock to ${INITIAL_STOCK} on Redis ready`);
+    }
+  } catch (err) {
+    // Ignore error if connection is not ready
+  }
 });
 
 // Connect to Redis and initialize stock atomically if not already set
