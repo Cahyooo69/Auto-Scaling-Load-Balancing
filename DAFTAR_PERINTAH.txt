@@ -16,11 +16,17 @@ CATATAN PENTING:
 Perintah : docker stack services wartiket
 Fungsi   : Menampilkan service yang aktif, image, port, dan jumlah replika (misal: 2/2).
 
-[1.2] Melihat Daftar Semua Container Fisik yang Sedang Berjalan
-Perintah : docker stack ps wartiket
-Fungsi   : Menampilkan detail setiap container worker, node penempatan, dan status (Running).
+[1.2] Melihat Daftar Semua Container Fisik yang Sedang Berjalan (Bersih & Rapi)
+Perintah : docker stack ps --filter "desired-state=running" wartiket
+Fungsi   : Menampilkan HANYA container yang saat ini aktif (Running), tanpa menampilkan
+           riwayat/arsip container lama yang sudah mati.
 
-[1.3] Melihat Semua Container Aktif di Docker Host
+[1.3] Melihat Semua Riwayat Task & Container Lama (Termasuk yang Pernah Crash/Mati)
+Perintah : docker stack ps wartiket
+Fungsi   : Menampilkan seluruh riwayat tugas (history audit trail), termasuk container
+           lama yang di-restart atau di-rolling update.
+
+[1.4] Melihat Semua Container Aktif di Docker Host
 Perintah : docker ps
 Fungsi   : Menampilkan ID container fisik, status uptime, dan port mapping.
 
