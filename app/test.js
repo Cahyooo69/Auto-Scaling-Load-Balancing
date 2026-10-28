@@ -4,7 +4,7 @@ const { BUY_LUA_SCRIPT } = require('./server');
 // Unit test verifying atomic decrement algorithm & Lua script integrity
 function testAtomicLogic() {
   console.log('Running testAtomicLogic...');
-  
+
   // Simulated atomic Redis memory state
   let state = { 'concert:tickets:stock': 5 };
 

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Progres Pertemuan 2 - Kelompok 1 Cloud Computing</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 14mm 14mm 14mm;
+    }
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      border-bottom: 2px solid #1a365d;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .header h1 {
+      font-size: 14pt;
+      color: #1a365d;
+      margin: 0 0 2px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header h2 {
+      font-size: 11pt;
+      color: #2b6cb0;
+      margin: 0;
+      font-weight: 600;
+    }
+    .project-info-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0 10px 0;
+      font-size: 8.5pt;
+    }
+    .info-row {
+      display: flex;
+      margin-bottom: 5px;
+    }
+    .info-grid-2 {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .info-col {
+      display: flex;
+      width: 49%;
+    }
+    .info-label {
+      font-weight: bold;
+      color: #4a5568;
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+    .info-value {
+      color: #2d3748;
+    }
+    .team-section {
+      margin-top: 3px;
+    }
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 20px;
+      margin-top: 4px;
+    }
+    .member-item {
+      color: #2d3748;
+      white-space: nowrap;
+    }
+    h2.section-title {
+      font-size: 11pt;
+      color: #1a365d;
+      border-left: 4px solid #3182ce;
+      padding-left: 7px;
+      margin: 12px 0 6px 0;
+      text-transform: uppercase;
+    }
+    p {
+      margin: 0 0 6px 0;
+      text-align: justify;
+    }
+    ul, ol {
+      margin: 0 0 6px 0;
+      padding-left: 18px;
+    }
+    li {
+      margin-bottom: 3px;
+    }
+    table.content-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 10px 0;
+      font-size: 8.5pt;
+      page-break-inside: avoid;
+    }
+    table.content-table th {
+      background-color: #2b6cb0;
+      color: #ffffff;
+      padding: 5px 7px;
+      text-align: left;
+      border: 1px solid #cbd5e0;
+      font-weight: 600;
+    }
+    table.content-table td {
+      padding: 4px 7px;
+      border: 1px solid #cbd5e0;
+    }
+    table.content-table tr:nth-child(even) {
+      background-color: #f7fafc;
+    }
+    .callout {
+      background-color: #ebf8ff;
+      border-left: 4px solid #3182ce;
+      padding: 7px 10px;
+      margin: 8px 0;
+      font-size: 8.5pt;
+      border-radius: 0 4px 4px 0;
+    }
+    .code-box {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 8pt;
+      margin: 6px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      page-break-inside: avoid;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: bold;
+      color: white;
+      background-color: #38a169;
+    }
+    .badge-limit {
+      background-color: #d69e2e;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: right;
+      font-size: 7.5pt;
+      color: #718096;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HALAMAN 1 -->
+  <div class="header">
+    <div style="border-bottom: 2px solid #1a365d; padding-bottom: 6px; margin-bottom: 8px;">
+      <h1 style="font-size: 14pt; color: #1a365d; margin: 0 0 2px 0; text-transform: uppercase; letter-spacing: 0.5px;">Laporan Progres Tugas Besar Cloud Computing</h1>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <h2 style="font-size: 11pt; color: #2b6cb0; margin: 0; font-weight: 600;">Pertemuan 2: Environment Setup & Core Deployment</h2>
+        <span style="font-size: 8.5pt; color: #718096; font-weight: 500;">Mata Kuliah: Cloud Computing (3 SKS) &bull; 29 Oktober 2026</span>
+      </div>
+    </div>
+
+    <div class="project-info-card">
+      <div class="info-row">
+        <span class="info-label">Topik Proyek:</span>
+        <span class="info-value"><strong>Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm</strong></span>
+      </div>
+      <div class="info-grid-2">
+        <div class="info-col">
+          <span class="info-label">Studi Kasus:</span>
+          <span class="info-value">Sistem War Tiket Konser Musik (Flash Crowd)</span>
+        </div>
+        <div class="info-col">
+          <span class="info-label">Repositori Git:</span>
+          <span class="info-value"><a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing" style="color: #2b6cb0; text-decoration: none;">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a></span>
+        </div>
+      </div>
+      <div class="team-section">
+        <div>
+          <span class="info-label">Kelompok:</span>
+          <span class="info-value"><strong>Kelompok 1</strong> &mdash; <em>Anggota Tim:</em></span>
+        </div>
+        <div class="team-grid">
+          <div class="member-item">&bull; <strong>Muhammad Ilham Nurcahyo</strong> (09040623063)</div>
+          <div class="member-item">&bull; <strong>Muhammad Daud Rizaldiansyah</strong> (09040623061)</div>
+          <div class="member-item">&bull; <strong>Hafid Aji Fauzan</strong> (0920623027)</div>
+          <div class="member-item">&bull; <strong>Davin Aryaguna Hermansyah</strong> (09020623020)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">1. Pendahuluan & Target Luaran Pertemuan 2</h2>
+  <p>
+    Berdasarkan silabus dan timeline mata kuliah Cloud Computing (3 SKS), sasaran utama untuk <strong>Pertemuan 2 (Environment Setup & Core Deployment)</strong> adalah:
+  </p>
+  <div class="callout">
+    <strong>Luaran Wajib Pertemuan 2:</strong><br>
+    <em>"Seluruh container dapat berjalan (up & running) dalam jaringan internal Docker dengan resource limit yang sudah diterapkan."</em>
+  </div>
+  <p>
+    Kelompok 1 telah berhasil menyelesaikan seluruh deployment stack bernama <code>wartiket</code> pada klaster Docker Swarm lokal. Laporan ini menyajikan bukti operasional seluruh container yang aktif, verifikasi pembatasan sumber daya (*resource limits*) di level kernel, dan validasi komunikasi jaringan internal.
+  </p>
+
+  <h2 class="section-title">2. Bukti Operasional Seluruh Container (Up & Running)</h2>
+  <p>
+    Semua service yang didefinisikan pada berkas <code>docker-compose.yml</code> telah berhasil di-deploy ke klaster Docker Swarm dengan status <strong>100% Running</strong> tanpa error:
+  </p>
+
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Service Name</th>
+        <th>Container ID</th>
+        <th>Status Desired</th>
+        <th>Current State</th>
+        <th>Port Binding</th>
+        <th>Fungsi Arsitektur</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>wartiket_nginx</code></td>
+        <td><code>i1orif57jdon</code></td>
+        <td><span class="badge">Running</span></td>
+        <td>Running (Healthy)</td>
+        <td><code>*:80-&gt;80/tcp</code></td>
+        <td>Reverse Proxy & Ingress Load Balancer (Port publik gerbang masuk).</td>
+      </tr>
+      <tr>
+        <td><code>wartiket_app.1</code></td>
+        <td><code>ri2ub2cbty8t</code></td>
+        <td><span class="badge">Running</span></td>
+        <td>Running (Healthy)</td>
+        <td><code>3000/tcp</code> (Internal)</td>
+        <td>Replika Worker Backend 1 (Mock API checkout tiket dengan delay 50-100ms).</td>
+      </tr>
+      <tr>
+        <td><code>wartiket_app.2</code></td>
+        <td><code>w06pvpk878z9</code></td>
+        <td><span class="badge">Running</span></td>
+        <td>Running (Healthy)</td>
+        <td><code>3000/tcp</code> (Internal)</td>
+        <td>Replika Worker Backend 2 (Menyeimbangkan beban transaksi bersama replika 1).</td>
+      </tr>
+      <tr>
+        <td><code>wartiket_redis</code></td>
+        <td><code>wvtwrcqh4wks</code></td>
+        <td><span class="badge">Running</span></td>
+        <td>Running (Healthy)</td>
+        <td><code>6379/tcp</code> (Internal)</td>
+        <td>In-Memory Datastore & Atomic Lua Script Locking (Stok tiket persistent).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="code-box">
+$ docker stack services wartiket
+ID             NAME             MODE         REPLICAS   IMAGE                   PORTS
+lbuec3bv49sx   wartiket_app     replicated   2/2        wartiket-app:latest     
+x7zlrm1hedl3   wartiket_nginx   replicated   1/1        wartiket-nginx:latest   *:80->80/tcp
+50k0j53unes3   wartiket_redis   replicated   1/1        redis:7-alpine          
+  </div>
+
+  <!-- HALAMAN 2 -->
+  <div class="page-break"></div>
+
+  <h2 class="section-title">3. Verifikasi Penerapan Resource Limits</h2>
+  <p>
+    Ketentuan standar tugas besar 3 SKS mewajibkan pembatasan sumber daya ketat pada setiap container:
+  </p>
+  <ul>
+    <li><strong>Maksimal CPU:</strong> <code>0.25 core</code> (maksimal 25% dari 1 core CPU host).</li>
+    <li><strong>Maksimal Memori RAM:</strong> <code>256 MB</code> (268.435.456 Bytes).</li>
+    <li><strong>Reservasi Sumber Daya:</strong> <code>0.10 core CPU</code> dan <code>64 MB RAM</code>.</li>
+  </ul>
+
+  <p>
+    Penerapan batasan ini diverifikasi langsung dari Docker Daemon menggunakan perintah inspeksi metadata tugas Swarm:
+  </p>
+
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Spesifikasi Limit (Compose)</th>
+        <th>Nilai Inspeksi Kernel (Docker Inspect)</th>
+        <th>Status Kepatuhan</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Backend API</strong> (<code>wartiket_app</code>)</td>
+        <td>CPU: 0.25 | RAM: 256M</td>
+        <td><code>NanoCPUs: 250000000 | MemoryBytes: 268435456</code></td>
+        <td><span class="badge">Memenuhi Standar</span></td>
+      </tr>
+      <tr>
+        <td><strong>Load Balancer</strong> (<code>wartiket_nginx</code>)</td>
+        <td>CPU: 0.25 | RAM: 256M</td>
+        <td><code>NanoCPUs: 250000000 | MemoryBytes: 268435456</code></td>
+        <td><span class="badge">Memenuhi Standar</span></td>
+      </tr>
+      <tr>
+        <td><strong>Database Redis</strong> (<code>wartiket_redis</code>)</td>
+        <td>CPU: 0.25 | RAM: 256M</td>
+        <td><code>NanoCPUs: 250000000 | MemoryBytes: 268435456</code></td>
+        <td><span class="badge">Memenuhi Standar</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Bukti Eksekusi Terminal (Docker Inspect):</strong>
+    <div class="code-box" style="margin-top: 5px; background: #fff;">
+$ docker service inspect wartiket_app --format "{{json .Spec.TaskTemplate.Resources}}"
+{"Limits":{"NanoCPUs":250000000,"MemoryBytes":268435456},"Reservations":{"NanoCPUs":100000000,"MemoryBytes":67108864}}
+    </div>
+    <em>Keterangan: Nilai 250.000.000 NanoCPUs setara tepat dengan 0.25 CPU Core, dan 268.435.456 Bytes setara tepat dengan 256 MB RAM.</em>
+  </div>
+
+  <h2 class="section-title">4. Skema Jaringan Internal & Uji Konektivitas</h2>
+  <p>
+    Seluruh container terhubung di dalam jaringan internal bertipe <strong>Docker Overlay Network</strong> dengan konfigurasi berikut:
+  </p>
+  <ul>
+    <li><strong>Nama Jaringan:</strong> <code>wartiket_wartiket-net</code> (Driver: <code>overlay</code>, Scope: <code>swarm</code>).</li>
+    <li><strong>Alokasi Subnet:</strong> <code>10.0.1.0/24</code> dengan gateway internal otomatis.</li>
+    <li><strong>Isolasi Port:</strong> Port backend (3000) dan port database (6379) tidak dipublikasikan ke host, sehingga hanya dapat diakses melalui jaringan internal oleh Nginx.</li>
+    <li><strong>Service Discovery & VIP:</strong> Nginx me-resolve nama host <code>app:3000</code> melalui DNS internal Docker Swarm (<code>127.0.0.11</code>).</li>
+  </ul>
+
+  <div class="code-box">
+$ docker network inspect wartiket_wartiket-net --format "Driver: {{.Driver}} | Scope: {{.Scope}} | Subnet: {{range .IPAM.Config}}{{.Subnet}}{{end}}"
+Driver: overlay | Scope: swarm | Subnet: 10.0.1.0/24
+  </div>
+
+  <!-- HALAMAN 3 -->
+  <div class="page-break"></div>
+
+  <h2 class="section-title">5. Pengujian Fungsional End-to-End Jaringan</h2>
+  <p>
+    Untuk membuktikan bahwa seluruh container tidak hanya berjalan tetapi juga saling terhubung secara fungsional (*end-to-end*), telah dilakukan pengujian transaksi bersamaan melalui port 80 Nginx menggunakan skrip penguji:
+  </p>
+
+  <div class="code-box">
+$ node test-quick.js
+Sending 20 concurrent checkout requests to http://localhost/tickets/buy...
+┌─────────┬────┬────────┬─────────┬────────────────┬───────────┬─────────┬──────────────────────────────┐
+│ (index) │ ID │ Status │ Latency │ ServedBy       │ Remaining │ Success │ Info                         │
+├─────────┼────┼────────┼─────────┼────────────────┼───────────┼─────────┼──────────────────────────────┤
+│ 0       │ 1  │ 200    │ '115ms' │ '86d0051a2950' │ 999       │ true    │ 'Tiket berhasil didapatkan!' │
+│ 1       │ 2  │ 200    │ '90ms'  │ '83f7bdab3528' │ 998       │ true    │ 'Tiket berhasil didapatkan!' │
+│ ...     │ .. │ 200    │ ...     │ ...            │ ...       │ true    │ 'Tiket berhasil didapatkan!' │
+│ 19      │ 20 │ 200    │ '98ms'  │ '86d0051a2950' │ 980       │ true    │ 'Tiket berhasil didapatkan!' │
+└─────────┴────┴────────┴─────────┴────────────────┴───────────┴─────────┴──────────────────────────────┘
+
+--- Load Balancing Distribution Across Containers ---
+┌──────────────┬────────┐
+│ (index)      │ Values │
+├──────────────┼────────┤
+│ 86d0051a2950 │ 10     │
+│ 83f7bdab3528 │ 10     │
+└──────────────┴────────┘
+  </div>
+
+  <div class="callout">
+    <strong>Kesimpulan Hasil Pengujian Fungsional:</strong>
+    <ol style="margin: 4px 0 0 0; padding-left: 18px;">
+      <li><strong>Konektivitas Nginx &rarr; Backend:</strong> Berhasil 100%. Request dari port 80 diteruskan dan dibagi seimbang 50:50 (10 request ke Worker 1 dan 10 request ke Worker 2).</li>
+      <li><strong>Konektivitas Backend &rarr; Redis:</strong> Berhasil 100%. Transaksi checkout berhasil mengeksekusi script Lua atomic decrement di Redis, terbukti dari sisa stok yang tereduksi konsisten dari 999 ke 980.</li>
+      <li><strong>Target SLA:</strong> Seluruh respon memiliki latency rata-rata &sim;95ms, jauh di bawah batas maksimum SLA yaitu 200ms.</li>
+    </ol>
+  </div>
+
+  <h2 class="section-title">6. Pemenuhan Target Luaran Pertemuan 2</h2>
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th>Indikator Keberhasilan Pertemuan 2</th>
+        <th>Target Persyaratan</th>
+        <th>Hasil Verifikasi Lapangan</th>
+        <th>Status Capaian</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Status Container</strong></td>
+        <td>Semua container up &amp; running</td>
+        <td>4 container aktif (Nginx, App.1, App.2, Redis) berstatus <em>Running</em>.</td>
+        <td><span class="badge">Selesai 100%</span></td>
+      </tr>
+      <tr>
+        <td><strong>Isolasi Jaringan</strong></td>
+        <td>Jaringan internal Docker</td>
+        <td>Docker Overlay Network (<code>10.0.1.0/24</code>) dengan proteksi port internal.</td>
+        <td><span class="badge">Selesai 100%</span></td>
+      </tr>
+      <tr>
+        <td><strong>Penerapan Resource Limit</strong></td>
+        <td>Maksimal 0.25 CPU &amp; 256MB RAM</td>
+        <td>Terverifikasi pada Docker Inspect (<code>250000000 NanoCPUs</code> &amp; <code>256M</code>).</td>
+        <td><span class="badge">Selesai 100%</span></td>
+      </tr>
+      <tr>
+        <td><strong>End-to-End Core Deployment</strong></td>
+        <td>Layanan terintegrasi &amp; responsif</td>
+        <td>Uji 20 transaksi sukses 100% dengan round-robin load balancing.</td>
+        <td><span class="badge">Selesai 100%</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Laporan Progres Kelompok 1 &bull; Cloud Computing 3 SKS &bull; Pertemuan 2
+  </div>
+
+</body>
+</html>
