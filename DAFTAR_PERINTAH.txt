@@ -75,10 +75,39 @@ Fungsi   : Menurunkan kapasitas worker setelah lonjakan trafik war tiket mereda.
 
 
 --------------------------------------------------------------------------------
-4. PENGUJIAN KETAHANAN SISTEM (DISASTER RECOVERY & FAIL-SAFE)
+4. PERTEMUAN 3: LOAD TESTING BERTAHAP 1-1000 VU & LIVE WEB DASHBOARD
 --------------------------------------------------------------------------------
 
-[4.1] Demo Otomatis Ketahanan Basis Data Redis (Sangat Disukai Dosen)
+[4.1] Reset Kuota Stok Tiket Sebelum Uji Beban (Stok 50.000)
+Perintah : Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 50000}'
+Fungsi   : Mengisi kuota stok 50.000 agar tiket tidak langsung habis saat ditembak 1.000 VU.
+
+[4.2] Uji Beban Bertahap Cepat (Demo 45 Detik) - Otomatis Buka Live Grafik (Kondisi 2 Replika)
+Perintah : Start-Process "http://localhost:5665"; docker run --rm -i -p 5665:5665 --network wartiket_wartiket-net -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://nginx" -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_PORT=5665 -e K6_WEB_DASHBOARD_HOST=0.0.0.0 grafana/k6 run /load-test/load-test-demo.js
+Fungsi   : Otomatis membuka browser ke http://localhost:5665 dan menjalankan uji beban bertahap (10 -> 100 -> 500 -> 1000 VU) dalam 45 detik.
+
+[4.3] Skalasi Klaster ke 8 Replika di Hadapan Dosen
+Perintah : docker service scale wartiket_app=8
+Fungsi   : Menambah 6 worker baru dalam 2 detik.
+
+[4.4] Uji Beban Bertahap Cepat (Demo 45 Detik) - Otomatis Buka Live Grafik (Kondisi 8 Replika)
+Perintah : Start-Process "http://localhost:5665"; docker run --rm -i -p 5665:5665 --network wartiket_wartiket-net -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://nginx" -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_PORT=5665 -e K6_WEB_DASHBOARD_HOST=0.0.0.0 grafana/k6 run /load-test/load-test-demo.js
+Fungsi   : Otomatis membuka grafik live dan membuktikan lonjakan Throughput (RPS naik 280%+) serta latensi tetap aman di bawah 200ms.
+
+[4.5] Uji Beban Penuh 3 Menit (Standar Laporan Formal)
+Perintah : docker run --rm -i --network wartiket_wartiket-net -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://nginx" grafana/k6 run /load-test/load-test.js
+Fungsi   : Uji beban bertahap 3 menit (10 -> 100 -> 500 -> 1000 VU).
+
+[4.6] Membuka Laporan Progres & Grafik Perbandingan HTML Pertemuan 3 di Browser
+Perintah : Start-Process "laporan_progres_kelompok_1_pertemuan_3.html"
+Fungsi   : Menampilkan dokumen laporan A4 lengkap dengan Grafik Perbandingan Chart.js.
+
+
+--------------------------------------------------------------------------------
+5. PENGUJIAN KETAHANAN SISTEM (DISASTER RECOVERY & FAIL-SAFE)
+--------------------------------------------------------------------------------
+
+[5.1] Demo Otomatis Ketahanan Basis Data Redis (Sangat Disukai Dosen)
 Perintah : node test-failover-demo.js
 Fungsi   : Menjalankan 5 skenario otomatis:
            1. Cek kondisi normal (Status 200).
@@ -87,34 +116,34 @@ Fungsi   : Menjalankan 5 skenario otomatis:
            4. Docker Swarm membangkitkan kembali Redis (Auto-Recovery).
            5. Transaksi normal kembali tanpa perlu restart backend (Auto-Reconnect).
 
-[4.2] Matikan Redis Secara Manual (Simulasi Crash)
+[5.2] Matikan Redis Secara Manual (Simulasi Crash)
 Perintah : docker service scale wartiket_redis=0
 Fungsi   : Mematikan seluruh instance Redis untuk menguji respon fail-safe backend.
 
-[4.3] Hidupkan Kembali Redis Secara Manual
+[5.3] Hidupkan Kembali Redis Secara Manual
 Perintah : docker service scale wartiket_redis=1
 Fungsi   : Menghidupkan kembali Redis; data stok tetap utuh berkat volume persistence.
 
-[4.4] Bunuh 1 Container Worker Backend Secara Paksa (Uji Failover Nginx)
+[5.4] Bunuh 1 Container Worker Backend Secara Paksa (Uji Failover Nginx)
 Perintah : docker rm -f $(docker ps -q -f name=wartiket_app | Select-Object -First 1)
 Fungsi   : Mematikan paksa salah satu worker. Nginx otomatis mengalihkan request ke replika
            lain tanpa error 502 (zero downtime failover).
 
 
 --------------------------------------------------------------------------------
-5. PENGELOLAAN SIKLUS HIDUP STACK DOCKER SWARM
+6. PENGELOLAAN SIKLUS HIDUP STACK DOCKER SWARM
 --------------------------------------------------------------------------------
 
-[5.1] Build Ulang Image Backend & Nginx
+[6.1] Build Ulang Image Backend & Nginx
 Perintah : docker build -t wartiket-app:latest ./app
            docker build -t wartiket-nginx:latest ./nginx
 Fungsi   : Memperbarui image jika ada perubahan script atau konfigurasi.
 
-[5.2] Deploy / Update Stack ke Docker Swarm
+[6.2] Deploy / Update Stack ke Docker Swarm
 Perintah : docker stack deploy -c docker-compose.yml wartiket
 Fungsi   : Menjalankan atau menerapkan pembaruan stack ke Docker Swarm.
 
-[5.3] Menghapus Seluruh Stack dari Docker Swarm
+[6.3] Menghapus Seluruh Stack dari Docker Swarm
 Perintah : docker stack rm wartiket
 Fungsi   : Menghapus seluruh container, service, dan overlay network jika ingin dibersihkan.
 

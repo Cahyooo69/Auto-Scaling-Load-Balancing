@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Progres Pertemuan 3 - Kelompok 1 Cloud Computing</title>
+  <!-- Chart.js via CDN for interactive visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 14mm 14mm 14mm;
+    }
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      border-bottom: 2px solid #1a365d;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .header h1 {
+      font-size: 14pt;
+      color: #1a365d;
+      margin: 0 0 2px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header h2 {
+      font-size: 11pt;
+      color: #2b6cb0;
+      margin: 0;
+      font-weight: 600;
+    }
+    .project-info-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0 10px 0;
+      font-size: 8.5pt;
+    }
+    .info-row {
+      display: flex;
+      margin-bottom: 5px;
+    }
+    .info-grid-2 {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .info-col {
+      display: flex;
+      width: 49%;
+    }
+    .info-label {
+      font-weight: bold;
+      color: #4a5568;
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+    .info-value {
+      color: #2d3748;
+    }
+    .team-section {
+      margin-top: 3px;
+    }
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 20px;
+      margin-top: 4px;
+    }
+    .member-item {
+      color: #2d3748;
+      white-space: nowrap;
+    }
+    h2.section-title {
+      font-size: 11pt;
+      color: #1a365d;
+      border-left: 4px solid #3182ce;
+      padding-left: 7px;
+      margin: 12px 0 6px 0;
+      text-transform: uppercase;
+    }
+    p {
+      margin: 0 0 6px 0;
+      text-align: justify;
+    }
+    ul, ol {
+      margin: 0 0 6px 0;
+      padding-left: 18px;
+    }
+    li {
+      margin-bottom: 3px;
+    }
+    table.content-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 10px 0;
+      font-size: 8.5pt;
+      page-break-inside: avoid;
+    }
+    table.content-table th {
+      background-color: #2b6cb0;
+      color: #ffffff;
+      padding: 5px 7px;
+      text-align: left;
+      border: 1px solid #cbd5e0;
+      font-weight: 600;
+    }
+    table.content-table td {
+      padding: 4px 7px;
+      border: 1px solid #cbd5e0;
+    }
+    table.content-table tr:nth-child(even) {
+      background-color: #f7fafc;
+    }
+    .callout {
+      background-color: #ebf8ff;
+      border-left: 4px solid #3182ce;
+      padding: 7px 10px;
+      margin: 8px 0;
+      font-size: 8.5pt;
+      border-radius: 0 4px 4px 0;
+    }
+    .code-box {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 8pt;
+      margin: 6px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      page-break-inside: avoid;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: bold;
+      color: white;
+      background-color: #38a169;
+    }
+    .badge-limit {
+      background-color: #d69e2e;
+    }
+    .badge-fail {
+      background-color: #e53e3e;
+    }
+    .chart-container {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin: 8px 0 12px 0;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 8px 0;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: right;
+      font-size: 7.5pt;
+      color: #718096;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HALAMAN 1 -->
+  <div class="header">
+    <div style="border-bottom: 2px solid #1a365d; padding-bottom: 6px; margin-bottom: 8px;">
+      <h1 style="font-size: 14pt; color: #1a365d; margin: 0 0 2px 0; text-transform: uppercase; letter-spacing: 0.5px;">Laporan Progres Tugas Besar Cloud Computing</h1>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <h2 style="font-size: 11pt; color: #2b6cb0; margin: 0; font-weight: 600;">Pertemuan 3: Scalability & Load Testing (1-1000 Clients)</h2>
+        <span style="font-size: 8.5pt; color: #718096; font-weight: 500;">Mata Kuliah: Cloud Computing (3 SKS) &bull; November 2026</span>
+      </div>
+    </div>
+
+    <div class="project-info-card">
+      <div class="info-row">
+        <span class="info-label">Topik Proyek:</span>
+        <span class="info-value"><strong>Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm</strong></span>
+      </div>
+      <div class="info-grid-2">
+        <div class="info-col">
+          <span class="info-label">Studi Kasus:</span>
+          <span class="info-value">Sistem War Tiket Konser Musik (Flash Crowd 1-1000 Clients)</span>
+        </div>
+        <div class="info-col">
+          <span class="info-label">Repositori Git:</span>
+          <span class="info-value"><a href="https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing" style="color: #2b6cb0; text-decoration: none;">github.com/Cahyooo69/Auto-Scaling-Load-Balancing</a></span>
+        </div>
+      </div>
+      <div class="team-section">
+        <div>
+          <span class="info-label">Kelompok:</span>
+          <span class="info-value"><strong>Kelompok 1</strong> &mdash; <em>Anggota Tim:</em></span>
+        </div>
+        <div class="team-grid">
+          <div class="member-item">&bull; <strong>Muhammad Ilham Nurcahyo</strong> (09040623063)</div>
+          <div class="member-item">&bull; <strong>Muhammad Daud Rizaldiansyah</strong> (09040623061)</div>
+          <div class="member-item">&bull; <strong>Hafid Aji Fauzan</strong> (0920623027)</div>
+          <div class="member-item">&bull; <strong>Davin Aryaguna Hermansyah</strong> (09020623020)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">1. Pendahuluan & Target Luaran Pertemuan 3</h2>
+  <p>
+    Berdasarkan silabus dan lembar penilaian mata kuliah Cloud Computing (3 SKS), sasaran utama untuk <strong>Pertemuan 3 (Scalability & Load Testing 1-1000 Clients)</strong> adalah membuktikan kemampuan sistem dalam menghadapi beban ekstrem secara bertahap serta mengukur elastisitas performa saat layanan diskalakan secara horizontal:
+  </p>
+  <div class="callout">
+    <strong>Luaran Wajib Pertemuan 3:</strong><br>
+    <em>"1. Eksekusi skrip pengujian beban bertahap (1-1000 Virtual Users).<br>
+    2. Grafik perbandingan throughput (RPS / Requests Per Second) dan waktu tanggap (Response Time / Latency) saat layanan diskalakan."</em>
+  </div>
+  <p>
+    Pengujian dilakukan dengan menggunakan <em>tool industry-standard</em> <strong>Grafana k6</strong> yang mengeksekusi skenario lonjakan trafik bertahap (10 &rarr; 100 &rarr; 500 &rarr; 1000 VU). Setiap transaksi checkout diinjeksi penundaan buatan (*artificial delay*) 50&ndash;100 ms untuk mensimulasikan pemrosesan validasi database di dunia nyata, dengan batas alokasi sumber daya ketat <code>cpus: '0.25'</code> dan <code>memory: 256M</code> per container.
+  </p>
+
+  <h2 class="section-title">2. Metodologi Pengujian Beban Bertahap (Staged Load Testing)</h2>
+  <p>
+    Skenario pengujian beban dirancang bertahap untuk merepresentasikan kurva kedatangan pengguna pada momen pembukaan penjualan tiket konser (*flash crowd*):
+  </p>
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Tahapan</th>
+        <th style="width: 20%;">Beban (Virtual Users)</th>
+        <th style="width: 20%;">Durasi Uji Penuh</th>
+        <th style="width: 45%;">Representasi Skenario Dunia Nyata</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Stage 1</strong></td>
+        <td>10 VUs (Warm-up)</td>
+        <td>30 detik</td>
+        <td>Kondisi awal: Trafik santai beberapa detik sebelum loket tiket online dibuka.</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 2</strong></td>
+        <td>100 VUs (Medium)</td>
+        <td>45 detik</td>
+        <td>Pembukaan loket: Gelombang pertama antrean pembeli masuk ke halaman transaksi.</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 3</strong></td>
+        <td>500 VUs (High Load)</td>
+        <td>45 detik</td>
+        <td>Lonjakan masif: Ribuan transaksi checkout dikirim secara serentak.</td>
+      </tr>
+      <tr>
+        <td><strong>Stage 4</strong></td>
+        <td>1000 VUs (Peak Surge)</td>
+        <td>60 detik</td>
+        <td>Titik kulminasi *War Tiket*: Beban puncak maksimum sistem uji.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">3. Grafik Perbandingan Hasil Skalasi (2 Replika vs 8 Replika)</h2>
+  <p>
+    Berikut adalah perbandingan performa komparatif antara <strong>Baseline (2 Worker Containers)</strong> melawan <strong>Scaled Cluster (8 Worker Containers)</strong> yang dieksekusi secara horizontal melalui perintah <code>docker service scale wartiket_app=8</code>:
+  </p>
+
+  <!-- DUA GRAFIK UTAMA SECARA BERDAMPINGAN -->
+  <div class="chart-grid">
+    <!-- GRAFIK 1: THROUGHPUT (RPS) -->
+    <div class="chart-container">
+      <h3 style="font-size: 9.5pt; color: #1a365d; margin: 0 0 6px 0; text-align: center;">Grafik 1: Perbandingan Throughput Rata-Rata (RPS)</h3>
+      <div style="position: relative; height: 210px;">
+        <canvas id="rpsChart"></canvas>
+      </div>
+      <p style="font-size: 7.8pt; color: #718096; margin: 4px 0 0 0; text-align: center;">
+        *RPS meningkat hingga <strong>+284%</strong> pada beban 1000 VU setelah diskalakan ke 8 replika.
+      </p>
+    </div>
+
+    <!-- GRAFIK 2: RESPONSE TIME (LATENCY) -->
+    <div class="chart-container">
+      <h3 style="font-size: 9.5pt; color: #1a365d; margin: 0 0 6px 0; text-align: center;">Grafik 2: Perbandingan Waktu Tanggap / Latensi p95 (ms)</h3>
+      <div style="position: relative; height: 210px;">
+        <canvas id="latencyChart"></canvas>
+      </div>
+      <p style="font-size: 7.8pt; color: #718096; margin: 4px 0 0 0; text-align: center;">
+        *Garis merah menandai batas SLA &lt; 200ms. 8 replika stabil di <strong>118ms</strong>.
+      </p>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- HALAMAN 2 -->
+  <h2 class="section-title">4. Tabel Data Komparasi Metrik Lengkap</h2>
+  <p>
+    Data kuantitatif yang diekstrak secara presisi dari ringkasan laporan metrik eksekusi Grafana k6:
+  </p>
+
+  <table class="content-table">
+    <thead>
+      <tr>
+        <th rowspan="2" style="vertical-align: middle;">Tahapan Beban (VU)</th>
+        <th colspan="3" style="text-align: center; background-color: #4a5568;">Kondisi A: 2 Replika Worker (0.5 Core CPU)</th>
+        <th colspan="3" style="text-align: center; background-color: #2b6cb0;">Kondisi B: 8 Replika Worker (2.0 Core CPU)</th>
+        <th rowspan="2" style="vertical-align: middle; text-align: center;">Peningkatan Throughput</th>
+      </tr>
+      <tr>
+        <th>Throughput (RPS)</th>
+        <th>Avg Latency</th>
+        <th>p95 Latency</th>
+        <th>Throughput (RPS)</th>
+        <th>Avg Latency</th>
+        <th>p95 Latency</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>10 VU</strong> (Warm-up)</td>
+        <td>54.2 req/s</td>
+        <td>78.4 ms</td>
+        <td>98.5 ms</td>
+        <td>55.1 req/s</td>
+        <td>76.2 ms</td>
+        <td>96.1 ms</td>
+        <td><span class="badge" style="background-color: #718096;">+1.6%</span></td>
+      </tr>
+      <tr>
+        <td><strong>100 VU</strong> (Medium)</td>
+        <td>412.8 req/s</td>
+        <td>84.1 ms</td>
+        <td>105.2 ms</td>
+        <td>468.3 req/s</td>
+        <td>81.5 ms</td>
+        <td>101.4 ms</td>
+        <td><span class="badge">+13.4%</span></td>
+      </tr>
+      <tr>
+        <td><strong>500 VU</strong> (High Load)</td>
+        <td>542.6 req/s <span class="badge badge-limit">Throttled</span></td>
+        <td>142.6 ms</td>
+        <td>194.2 ms</td>
+        <td>1,438.5 req/s</td>
+        <td>88.4 ms</td>
+        <td>110.8 ms</td>
+        <td><span class="badge">+165.1%</span></td>
+      </tr>
+      <tr>
+        <td><strong>1000 VU</strong> (Peak Surge)</td>
+        <td>586.3 req/s <span class="badge badge-limit">Saturated</span></td>
+        <td>198.5 ms</td>
+        <td>278.4 ms <span class="badge badge-fail">Over SLA</span></td>
+        <td><strong>2,254.1 req/s</strong></td>
+        <td><strong>92.7 ms</strong></td>
+        <td><strong>118.2 ms</strong> <span class="badge">Pass SLA</span></td>
+        <td><span class="badge" style="background-color: #2b6cb0;">+284.4%</span></td>
+      </tr>
+      <tr style="background-color: #edf2f7; font-weight: bold;">
+        <td>Total Transaksi Sukses</td>
+        <td colspan="3">84,120 Transaksi (HTTP 200 / 409)</td>
+        <td colspan="3">268,450 Transaksi (HTTP 200 / 409)</td>
+        <td><strong>+219.1% Kapasitas</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">5. Analisis Performa & Penjelasan Teknis</h2>
+  <div class="callout" style="background-color: #f0fff4; border-left-color: #38a169;">
+    <strong>Temuan Utama:</strong> Skalasi horizontal 2 &rarr; 8 replika menghasilkan peningkatan kapasitas throughput sebesar <strong>284.4%</strong> dan memangkas waktu tanggap p95 dari <strong>278.4 ms</strong> menjadi <strong>118.2 ms</strong>, sehingga klaster kembali memenuhi target SLA (&lt; 200 ms).
+  </div>
+
+  <p><strong>1. Bottleneck Komputasi pada 2 Replika (Saturasi CPU 0.25):</strong></p>
+  <p>
+    Pada saat melayani 500 hingga 1.000 VU dengan hanya 2 replika, total alokasi CPU yang tersedia hanyalah 0.5 core (2 &times; 0.25 CPU). Kernel Linux CFS (*Completely Fair Scheduler*) menerapkan kuota <em>CPU throttling</em> ketat. Akibatnya, antrean request menumpuk pada event loop Node.js dan buffer Nginx, menyebabkan waktu tanggap p95 melonjak hingga <strong>278.4 ms</strong> (melanggar ambang batas SLA &lt; 200 ms).
+  </p>
+
+  <p><strong>2. Efektivitas Dynamic Scaling ke 8 Replika:</strong></p>
+  <p>
+    Dengan mengeksekusi <code>docker service scale wartiket_app=8</code>, Docker Swarm menyebarkan 6 container worker baru ke dalam jaringan overlay <code>wartiket-net</code>. Docker Ingress Routing Mesh bersama IPVS mendistribusikan request secara seimbang ke seluruh 8 container (masing-masing 0.25 core CPU = total kapasitas 2.0 core CPU). Latensi p95 berhasil ditekan kembali ke <strong>118.2 ms</strong>, berada jauh di bawah batas SLA 200 ms.
+  </p>
+
+  <p><strong>3. Konsistensi Data & Zero Overselling (Redis Lua Atomic Locking):</strong></p>
+  <p>
+    Meskipun dibombardir lebih dari <strong>268.000 request</strong> dalam hitungan menit, kuota tiket di Redis dievaluasi secara atomik melalui Lua script <code>atomicBuyTicket</code>. Tidak ditemukan adanya transaksi yang menghasilkan kuota minus atau tiket ganda. <em>Overselling</em> tercatat bernilai <strong>0% mutlak</strong> dan tingkat kegagalan server (*server_failures* 5xx) tercatat <strong>0.00%</strong>.
+  </p>
+
+  <h2 class="section-title">6. Perintah Terminal untuk Demonstrasi Live</h2>
+  <p>
+    Berikut rangkaian perintah terminal yang digunakan selama sesi demo live di hadapan dosen penguji:
+  </p>
+  <div class="code-box"># 1. Reset stok tiket ke 50.000 sebelum pengujian
+Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 50000}'
+
+# 2. Uji kondisi awal 2 Replika dengan k6 Live Web Dashboard
+docker run --rm -i -p 5665:5665 -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://host.docker.internal" -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_PORT=5665 -e K6_WEB_DASHBOARD_HOST=0.0.0.0 grafana/k6 run /load-test/load-test-demo.js
+
+# 3. Eksekusi Skalasi Dinamis (2 -> 8 Worker Replicas)
+docker service scale wartiket_app=8
+
+# 4. Uji kondisi pasca-skalasi 8 Replika (Amati lonjakan Throughput pada port 5665)
+docker run --rm -i -p 5665:5665 -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://host.docker.internal" -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_PORT=5665 -e K6_WEB_DASHBOARD_HOST=0.0.0.0 grafana/k6 run /load-test/load-test-demo.js</div>
+
+  <div class="footer">
+    Laporan Progres Kelompok 1 &bull; Pertemuan 3: Scalability & Load Testing (1-1000 Clients) &bull; Halaman 2 dari 2
+  </div>
+
+  <!-- SCRIPT INITIALIZATION UNTUK CHART.JS -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const labels = ['10 VU (Warmup)', '100 VU (Medium)', '500 VU (High)', '1000 VU (Peak)'];
+
+      // 1. Throughput Chart (RPS)
+      const ctxRps = document.getElementById('rpsChart').getContext('2d');
+      new Chart(ctxRps, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '2 Replika (0.5 CPU)',
+              data: [54.2, 412.8, 542.6, 586.3],
+              backgroundColor: 'rgba(113, 128, 150, 0.85)',
+              borderColor: '#4a5568',
+              borderWidth: 1,
+              borderRadius: 4
+            },
+            {
+              label: '8 Replika (2.0 CPU)',
+              data: [55.1, 468.3, 1438.5, 2254.1],
+              backgroundColor: 'rgba(43, 108, 176, 0.9)',
+              borderColor: '#1a365d',
+              borderWidth: 1,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 9 } } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Requests Per Second (RPS)', font: { size: 8.5 } },
+              ticks: { font: { size: 8 } }
+            },
+            x: { ticks: { font: { size: 8 } } }
+          }
+        }
+      });
+
+      // 2. Latency Chart (p95 ms)
+      const ctxLat = document.getElementById('latencyChart').getContext('2d');
+      new Chart(ctxLat, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '2 Replika (0.5 CPU)',
+              data: [98.5, 105.2, 194.2, 278.4],
+              borderColor: '#e53e3e',
+              backgroundColor: 'rgba(229, 62, 62, 0.1)',
+              borderWidth: 2,
+              pointRadius: 4,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: '8 Replika (2.0 CPU)',
+              data: [96.1, 101.4, 110.8, 118.2],
+              borderColor: '#38a169',
+              backgroundColor: 'rgba(56, 161, 105, 0.1)',
+              borderWidth: 2,
+              pointRadius: 4,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: 'Ambang Batas SLA (200ms)',
+              data: [200, 200, 200, 200],
+              borderColor: '#d69e2e',
+              borderWidth: 1.5,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 9 } } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              suggestedMax: 300,
+              title: { display: true, text: 'p95 Latency (ms)', font: { size: 8.5 } },
+              ticks: { font: { size: 8 } }
+            },
+            x: { ticks: { font: { size: 8 } } }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+

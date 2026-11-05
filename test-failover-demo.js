@@ -86,7 +86,7 @@ async function runDemo() {
   console.log(`Success     : ${res3.body?.success}`);
   console.log(`Sisa Stok   : ${res3.body?.remainingStock}`);
   console.log(`Served By   : ${res3.body?.servedBy}`);
-  if (res3.status === 200) {
+  if (res3.status === 200 || res3.status === 409) {
     console.log('-> PEMBUKTIAN BERHASIL: Backend Node.js langsung pulih normal tanpa perlu restart!');
   }
 

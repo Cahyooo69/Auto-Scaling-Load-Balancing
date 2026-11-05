@@ -1,6 +1,7 @@
 const express = require('express');
 const Redis = require('ioredis');
 const os = require('os');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
@@ -71,6 +72,11 @@ const artificialDelay = () => {
   const ms = Math.floor(Math.random() * 51) + 50; // 50 to 100ms
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
+
+// Simple web interface for live demo
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // Healthcheck endpoint for Docker Swarm & Nginx
 app.get('/health', (req, res) => {
