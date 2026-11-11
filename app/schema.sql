@@ -61,3 +61,27 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);
+
+-- 5. Table Bookings & Booking Details (Relasional Order History)
+CREATE TABLE IF NOT EXISTS bookings (
+    id SERIAL PRIMARY KEY,
+    booking_code VARCHAR(64) UNIQUE NOT NULL,
+    user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    concert_id INT REFERENCES concerts(id) ON DELETE SET NULL,
+    total_amount NUMERIC(12,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PAID' CHECK (status IN ('PAID', 'PENDING', 'EXPIRED')),
+    server_instance_id VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS booking_details (
+    id SERIAL PRIMARY KEY,
+    booking_id INT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+    seat_id INT REFERENCES seats(id) ON DELETE SET NULL,
+    seat_number VARCHAR(20) NOT NULL,
+    category VARCHAR(30) DEFAULT 'CAT 1',
+    price NUMERIC(12,2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bookings_user_created ON bookings(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_booking_details_booking ON booking_details(booking_id);

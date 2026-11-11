@@ -59,7 +59,7 @@ services:
       retries: 3
       start_period: 3s
 
-  # Node.js Mock API: Scalable worker service (2 -> 8 replicas)
+  # Node.js API Worker Service (3 initial replicas -> up to 8 replicas on scale)
   app:
     image: wartiket-app:latest
     build:
@@ -78,10 +78,11 @@ services:
       - DB_POOL_MAX=12
       - QUEUE_MAX_ACTIVE=200
       - INITIAL_STOCK=1000
+      - JWT_SECRET=wartiket-cloud-jwt-secret-2026
     networks:
       - wartiket-net
     deploy:
-      replicas: 2
+      replicas: 3
       restart_policy:
         condition: any
         delay: 2s

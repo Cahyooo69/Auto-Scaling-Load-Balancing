@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { signJwt } = require('./src/utils/jwt');
+const { createApiRouter } = require('./src/routes/api');
 
 const app = express();
 app.use(express.json());
@@ -252,6 +254,35 @@ async function initDatabaseSchema(attempt = 1) {
       }
     } else {
       await pool.query('CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))').catch(() => {});
+      await pool.query(`
+        INSERT INTO users (name, email, password, phone, id_card, role)
+        VALUES
+          ('Admin WarTiket', 'admin@wartiket.id', 'password123', '081100000001', '3171000000000001', 'admin'),
+          ('User Penonton', 'user@wartiket.id', 'password123', '081100000002', '3171000000000002', 'user')
+        ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role
+      `).catch(() => {});
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bookings (
+          id SERIAL PRIMARY KEY,
+          booking_code VARCHAR(64) UNIQUE NOT NULL,
+          user_id INT REFERENCES users(id) ON DELETE SET NULL,
+          concert_id INT REFERENCES concerts(id) ON DELETE SET NULL,
+          total_amount NUMERIC(12,2) NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'PAID' CHECK (status IN ('PAID', 'PENDING', 'EXPIRED')),
+          server_instance_id VARCHAR(100) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS booking_details (
+          id SERIAL PRIMARY KEY,
+          booking_id INT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+          seat_id INT REFERENCES seats(id) ON DELETE SET NULL,
+          seat_number VARCHAR(20) NOT NULL,
+          category VARCHAR(30) DEFAULT 'CAT 1',
+          price NUMERIC(12,2) NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bookings_user_created ON bookings(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_booking_details_booking ON booking_details(booking_id);
+      `).catch(() => {});
       console.log(`[Database] Database already initialized and verified.`);
     }
   } catch (err) {
@@ -301,9 +332,7 @@ const artificialDelay = (min = 30, max = 60) => {
 // ============================================================================
 
 const PAGE_ROUTES = [
-  { paths: ['/', '/index.html'], file: 'index.html' },
-  { paths: ['/konser', '/concerts.html'], file: 'concerts.html' },
-  { paths: ['/kontak', '/contact.html'], file: 'contact.html' },
+  { paths: ['/', '/index.html', '/konser', '/concerts.html', '/riwayat', '/kontak', '/contact.html', '/live-test', '/hasil-test'], file: 'index.html' },
 ];
 
 PAGE_ROUTES.forEach(({ paths, file }) => {
@@ -404,6 +433,8 @@ app.post(['/api/auth/login', '/api/login'], async (req, res) => {
     // Fallback demo users if DB is temporarily reconnecting
     if (!user) {
       const demoUsers = {
+        'admin@wartiket.id': { id: 1006, name: 'Admin WarTiket', email: 'admin@wartiket.id', phone: '081100000001', id_card: '3171000000000001', role: 'admin' },
+        'user@wartiket.id': { id: 1007, name: 'User Penonton', email: 'user@wartiket.id', phone: '081100000002', id_card: '3171000000000002', role: 'user' },
         'dosen@wartiket.id': { id: 1, name: 'Dr. Ir. Budi Santoso, M.Kom', email: 'dosen@wartiket.id', phone: '081122334455', id_card: '3171010101750001', role: 'lecturer' },
         'mahasiswa1@wartiket.id': { id: 2, name: 'Kelompok 1 Cloud Lead', email: 'mahasiswa1@wartiket.id', phone: '081234567890', id_card: '3171020202990002', role: 'student' },
         'mahasiswa2@wartiket.id': { id: 3, name: 'Kelompok 1 DevOps Engineer', email: 'mahasiswa2@wartiket.id', phone: '081298765432', id_card: '3171030303980003', role: 'student' },
@@ -439,12 +470,24 @@ app.post(['/api/auth/login', '/api/login'], async (req, res) => {
       role: user.role || 'user',
     };
 
-    // Persist shared session in Redis so every Swarm worker node recognizes the user
+    // Persist shared session in Redis + sign HS256 JWT across all Swarm worker nodes
     const token = crypto.randomUUID();
+    const jwtToken = signJwt({
+      id: userPayload.id,
+      email: userPayload.email,
+      role: userPayload.role,
+      name: userPayload.name,
+    }, SESSION_TTL_SEC);
     if (isRedisReady) {
       await redis.set(`session:${token}`, JSON.stringify(userPayload), 'EX', SESSION_TTL_SEC).catch(() => {});
     }
     res.cookie('wt_session', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: SESSION_TTL_SEC * 1000,
+      path: '/',
+    });
+    res.cookie('wt_jwt', jwtToken, {
       httpOnly: true,
       sameSite: 'lax',
       maxAge: SESSION_TTL_SEC * 1000,
@@ -455,6 +498,7 @@ app.post(['/api/auth/login', '/api/login'], async (req, res) => {
       success: true,
       message: 'Login berhasil!',
       token,
+      jwtToken,
       user: userPayload,
       servedBy: os.hostname(),
     });
@@ -489,6 +533,7 @@ app.post('/api/auth/logout', async (req, res) => {
     await redis.del(`session:${token}`).catch(() => {});
   }
   res.clearCookie('wt_session', { path: '/' });
+  res.clearCookie('wt_jwt', { path: '/' });
   return res.json({ success: true, servedBy: os.hostname() });
 });
 
@@ -867,6 +912,9 @@ async function releaseRedisCheckoutLock({
 }
 
 // --- TRANSAKSI CHECKOUT / WAR TIKET (TAHAP 6 CHECKOUT) ---
+// Short-lived local cache for static concert metadata during high-concurrency checkouts
+const concertMetaCache = new Map();
+
 // Atomic locking via Redis Lua + Permanent ACID write to PostgreSQL
 app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
   const redisConcertKey = `concert:${parseInt(req.body?.concertId, 10) || 1}:stock`;
@@ -876,7 +924,6 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
   let seatLockAcquired = false;
 
   try {
-    await artificialDelay(20, 50);
 
     const body = req.body || {};
     const userId = parseInt(body.userId, 10) || 1;
@@ -951,8 +998,8 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
       seatLockAcquired = true;
     }
 
-    // Step 2: PostgreSQL Permanent ACID Transaction
-    const orderId = `TRX-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    // Step 2: Read metadata outside TX lock, then run lean PostgreSQL ACID transaction
+    const orderId = `TRX-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     let bookedSeatNumber = requestedSeatNumber || 'A-01';
     let ticketPrice = 1500000;
     let concertTitle = 'Konser Musik';
@@ -961,24 +1008,38 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     let buyerName = 'Penonton Terdaftar';
     let buyerEmail = 'user@wartiket.id';
 
+    const cachedConcert = concertMetaCache.get(concertId);
+    const hasFreshConcert = cachedConcert && (Date.now() - cachedConcert.at) < 10000;
+    const [userRes, concertRes] = await Promise.all([
+      pool.query('SELECT id, name, email FROM users WHERE id = $1', [userId]),
+      hasFreshConcert
+        ? Promise.resolve(null)
+        : pool.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]),
+    ]);
+
+    const dbUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
+    if (userRes.rows.length > 0) {
+      buyerName = userRes.rows[0].name;
+      buyerEmail = userRes.rows[0].email;
+    }
+
+    if (hasFreshConcert) {
+      ({ title: concertTitle, venue: concertVenue, concertDate, price: ticketPrice } = cachedConcert.data);
+    } else if (concertRes && concertRes.rows.length > 0) {
+      const cRow = concertRes.rows[0];
+      concertTitle = cRow.title;
+      concertVenue = cRow.venue;
+      concertDate = cRow.concert_date;
+      ticketPrice = parseFloat(cRow.price);
+      concertMetaCache.set(concertId, {
+        at: Date.now(),
+        data: { title: concertTitle, venue: concertVenue, concertDate, price: ticketPrice },
+      });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      const userRes = await client.query('SELECT id, name, email, phone, id_card FROM users WHERE id = $1', [userId]);
-      const dbUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
-      if (userRes.rows.length > 0) {
-        buyerName = userRes.rows[0].name;
-        buyerEmail = userRes.rows[0].email;
-      }
-
-      const concertRes = await client.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]);
-      if (concertRes.rows.length > 0) {
-        concertTitle = concertRes.rows[0].title;
-        concertVenue = concertRes.rows[0].venue;
-        concertDate = concertRes.rows[0].concert_date;
-        ticketPrice = parseFloat(concertRes.rows[0].price);
-      }
 
       // Seat selection & row-level locking
       let seatRecord;
@@ -987,7 +1048,7 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
           `UPDATE seats 
            SET status = 'Booked', locked_by = $1 
            WHERE id = $2 AND concert_id = $3 AND status = 'Available' 
-           RETURNING id, seat_number, price`,
+           RETURNING id, seat_number, category, price`,
           [dbUserId, seatId, concertId]
         );
         if (seatRes.rows.length > 0) {
@@ -1005,7 +1066,7 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
              LIMIT 1 
              FOR UPDATE SKIP LOCKED
            )
-           RETURNING id, seat_number, price`,
+           RETURNING id, seat_number, category, price`,
           [dbUserId, concertId]
         );
         if (findSeatRes.rows.length > 0) {
@@ -1034,20 +1095,25 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
       }
 
       bookedSeatNumber = seatRecord.seat_number;
+      const bookedSeatCategory = seatRecord.category || 'CAT 1';
       ticketPrice = parseFloat(seatRecord.price);
 
+      // Single writable CTE writes transactions + bookings + booking_details in one roundtrip
       await client.query(
-        `INSERT INTO transactions 
-         (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, 'COMPLETED', $7)`,
-        [orderId, dbUserId, concertId, seatId, bookedSeatNumber, ticketPrice, os.hostname()]
-      );
-
-      await client.query(
-        `UPDATE concerts 
-         SET available_seats = GREATEST(0, available_seats - 1) 
-         WHERE id = $1`,
-        [concertId]
+        `WITH ins_trx AS (
+           INSERT INTO transactions
+             (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'COMPLETED', $7)
+         ),
+         ins_booking AS (
+           INSERT INTO bookings
+             (booking_code, user_id, concert_id, total_amount, status, server_instance_id)
+           VALUES ($1, $2, $3, $6, 'PAID', $7)
+           RETURNING id
+         )
+         INSERT INTO booking_details (booking_id, seat_id, seat_number, category, price)
+         SELECT id, $4, $5, $8, $6 FROM ins_booking`,
+        [orderId, dbUserId, concertId, seatId, bookedSeatNumber, ticketPrice, os.hostname(), bookedSeatCategory]
       );
 
       await client.query('COMMIT');
@@ -1059,15 +1125,22 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
       client.release();
     }
 
-    // Invalidate cached reads & release queue/lock cleanly after DB commit
-    await invalidateConcertCache(concertId);
+    // Update display counter outside the critical TX lock so concurrent buyers never serialize on concerts.id
+    pool.query(
+      'UPDATE concerts SET available_seats = GREATEST(0, LEAST(available_seats, $1)) WHERE id = $2',
+      [remainingStock, concertId]
+    ).catch(() => {});
+
+    // Invalidate cached reads & release queue/lock cleanly in parallel after DB commit
+    const cleanupTasks = [invalidateConcertCache(concertId)];
     if (seatLockAcquired && seatLockKey) {
-      await redis.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {});
+      cleanupTasks.push(redis.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {}));
     }
     if (queueToken) {
-      redis.zrem(QUEUE_ACTIVE_KEY, queueToken).catch(() => {});
-      redis.del(`queue:meta:${queueToken}`).catch(() => {});
+      cleanupTasks.push(redis.zrem(QUEUE_ACTIVE_KEY, queueToken).catch(() => {}));
+      cleanupTasks.push(redis.del(`queue:meta:${queueToken}`).catch(() => {}));
     }
+    await Promise.all(cleanupTasks);
 
     // Step 3: Success Return E-Ticket
     return res.status(200).json({
@@ -1153,6 +1226,7 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
     if (!isDbReady) await checkDbConnection();
 
     let syncedStocks = {};
+    let concertQuotas = [];
     if (isDbReady) {
       const client = await pool.connect();
       try {
@@ -1171,11 +1245,17 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
           SET available_seats = (
             SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id AND s.status = 'Available'
           )
-          RETURNING id, available_seats
+          RETURNING id, total_seats, available_seats
         `);
         for (const row of syncRes.rows) {
           syncedStocks[row.id] = Number(row.available_seats);
+          concertQuotas.push({
+            id: Number(row.id),
+            totalSeats: Number(row.total_seats || 500),
+            availableSeats: Number(row.available_seats || 0),
+          });
         }
+        concertQuotas.sort((a, b) => a.id - b.id);
         await client.query('COMMIT');
       } catch (dbErr) {
         await client.query('ROLLBACK').catch(() => {});
@@ -1201,12 +1281,15 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
       message: `Katalog tiket, denah kursi di Database, dan Redis Atomic Lock berhasil di-reset ke kondisi awal.`,
       stock: INITIAL_STOCK,
       concertStocks: syncedStocks,
+      concertQuotas,
       servedBy: os.hostname(),
     });
   } catch (err) {
     res.status(500).json({ error: 'Gagal mereset data', message: err.message, servedBy: os.hostname() });
   }
 });
+
+app.use('/api', createApiRouter({ pool, port: PORT, getDbReady: () => isDbReady, checkDbConnection }));
 
 // Boot server
 if (require.main === module) {

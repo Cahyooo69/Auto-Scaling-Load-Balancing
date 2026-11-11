@@ -8,10 +8,8 @@ const { test, expect } = require('@playwright/test');
 const BASE_URL = process.env.TARGET_URL || 'http://localhost';
 
 const POV_ACCOUNTS = [
-  { email: 'dosen@wartiket.id', expectedSnippet: 'Dr. Ir. Budi Santoso' },
-  { email: 'mahasiswa1@wartiket.id', expectedSnippet: 'Cloud Lead' },
-  { email: 'vip.buyer@gmail.com', expectedSnippet: 'Siti Rahmawati' },
-  { email: 'festival.fan@gmail.com', expectedSnippet: 'Andi Pratama' },
+  { email: 'admin@wartiket.id', expectedSnippet: 'Admin WarTiket' },
+  { email: 'user@wartiket.id', expectedSnippet: 'User Penonton' },
 ];
 
 test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
@@ -20,7 +18,7 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
     expect(res.ok()).toBeTruthy();
   });
 
-  test('[Skenario 1] Autentikasi 4 POV Demo Accounts', async ({ page }) => {
+  test('[Skenario 1] Autentikasi 2 POV Demo Accounts (ADMIN & USER)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${BASE_URL}/`);
 
@@ -31,7 +29,7 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
       await page.locator('#btnLoginSubmit').click();
 
       await expect(page.locator('#navAuthLabel')).not.toHaveText('Masuk');
-      const storedUser = await page.evaluate(() => JSON.parse(localStorage.getItem('war_tiket_user') || 'null'));
+      const storedUser = await page.evaluate(() => JSON.parse(sessionStorage.getItem('wartiket_user') || 'null'));
       expect(storedUser?.name || '').toContain(pov.expectedSnippet);
 
       // Logout via dropdown so next POV can sign in cleanly
@@ -43,10 +41,13 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
   test('[Skenario 2] Multi-Page Navigasi, Stationary Top Navbar, Search Icon & Footer 3 Kolom', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    for (const route of ['/', '/konser', '/kontak']) {
+    for (const route of ['/', '/konser', '/kontak', '/live-test', '/hasil-test']) {
       await page.goto(`${BASE_URL}${route}`);
-      const expectSearch = route === '/' || route === '/konser';
-      await expect(page.locator('#btnToggleSearchPanel')).toHaveCount(expectSearch ? 1 : 0);
+      await expect(page.locator('#btnToggleSearchPanel')).toHaveCount(0);
+      await expect(page.locator('#navSearchPanel')).toHaveCount(0);
+      if (route === '/') {
+        await expect(page.locator('#page-beranda .hero-search-form')).toBeVisible();
+      }
       await expect(page.locator('a[href*="cara-war"], a[href*="guide.html"]')).toHaveCount(0);
 
       const navPos = await page.locator('.navbar').evaluate((el) => getComputedStyle(el).position);
@@ -56,7 +57,7 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
       const navAfter = await page.locator('.navbar').boundingBox();
       const scrollY = await page.evaluate(() => window.scrollY);
       if (scrollY > 200) {
-        expect((navAfter?.y ?? 0) + (navAfter?.height ?? 0)).toBeLessThanOrEqual(0);
+        expect(navAfter?.y ?? 0).toBeLessThan(-200);
       }
 
       const footerCols = await page.locator('.site-footer .footer-inner')
@@ -71,9 +72,9 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${BASE_URL}/konser`);
 
-    // Login as Dosen Penguji (longest academic title)
+    // Login as USER
     await page.locator('#navBtnAuth').click();
-    await page.getByRole('button', { name: /Dosen Penguji/i }).click();
+    await page.getByRole('button', { name: /^USER/i }).click();
     await page.locator('#btnLoginSubmit').click();
     await expect(page.locator('#navAuthLabel')).not.toHaveText('Masuk');
 
@@ -84,12 +85,12 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
     await seatE05.click();
     await page.locator('#btnProceedToData').click();
 
-    await expect(page.locator('#buyerFullName')).toHaveValue(/Dr\. Ir\. Budi Santoso, M\.Kom/);
+    await expect(page.locator('#buyerFullName')).toHaveValue(/User Penonton/);
     await page.locator('#btnBayarSekarang').click();
 
     await expect(page.locator('#phaseETicket')).toBeVisible();
     await expect(page.locator('#ticketSeat')).toHaveText('E-05');
-    await expect(page.locator('#ticketBuyer')).toHaveText('Dr. Ir. Budi Santoso, M.Kom');
+    await expect(page.locator('#ticketBuyer')).toHaveText('User Penonton');
 
     // Skenario 4: Emulate @media print
     await page.emulateMedia({ media: 'print' });
@@ -104,8 +105,9 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${BASE_URL}/konser`);
 
+    // Login as ADMIN
     await page.locator('#navBtnAuth').click();
-    await page.getByRole('button', { name: /VIP Buyer/i }).click();
+    await page.getByRole('button', { name: /^ADMIN/i }).click();
     await page.locator('#btnLoginSubmit').click();
     await expect(page.locator('#navAuthLabel')).not.toHaveText('Masuk');
 

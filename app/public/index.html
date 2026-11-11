@@ -17,18 +17,42 @@
   <link
     href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Nunito:wght@400;600;700;800;900&display=swap"
     rel="stylesheet">
+  <link rel="preload" as="image" href="/img/hero-bg.jpg">
   <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function () {
+      var d = document.documentElement;
+      var h = (location.hash || '').replace(/^#\/?/, '').toLowerCase();
+      var p = (location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+      var valid = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-test'];
+      var page = valid.indexOf(h) >= 0
+        ? h
+        : (p === '/konser' || p === '/concerts.html'
+          ? 'konser'
+          : (p === '/riwayat' ? 'riwayat' : (p === '/kontak' || p === '/contact.html' ? 'kontak' : (p === '/live-test' ? 'live-test' : (p === '/hasil-test' ? 'hasil-test' : 'beranda')))));
+      d.setAttribute('data-active-page', page);
+      d.classList.add('wt-booting');
+      var cw = d.clientWidth || 1440;
+      var sw = (window.screen && window.screen.width) || cw;
+      var ow = window.outerWidth || sw;
+      var touch = Boolean(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+      var mobile = (touch && cw <= 1024) || (cw <= 768 && (sw <= 768 || ow <= 820));
+      d.classList.toggle('wt-mobile', mobile);
+      d.style.setProperty('--boot-zoom', mobile ? '1' : String(cw / 1440));
+    })();
+  </script>
 </head>
 
 <body>
+  <script>if (document.documentElement.classList.contains('wt-mobile')) document.body.classList.add('is-mobile');</script>
 
   <!-- Kanvas skala tetap 1440px agar proporsi visual seragam di semua zoom -->
   <div id="stage">
 
-    <!-- TOP NAVBAR (Diam di paling atas halaman, tidak ikut turun saat scroll) -->
+    <!-- TOP NAVBAR (Diam di paling atas halaman, TIDAK ikut turun saat scroll ke bawah) -->
     <header class="navbar" id="navbar" aria-label="Navigasi Utama">
       <div class="navbar-inner">
-        <a href="/" class="nav-brand">
+        <a href="#beranda" class="nav-brand" data-page="beranda">
           <div class="nav-brand-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
               stroke-linecap="round" stroke-linejoin="round">
@@ -47,22 +71,16 @@
 
         <nav aria-label="Menu Utama">
           <ul class="nav-menu">
-            <li><a href="/" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
-            <li><a href="/konser" class="nav-link" data-page="konser">Konser</a></li>
-            <li><a href="/kontak" class="nav-link" data-page="kontak">Kontak</a></li>
+            <li><a href="#beranda" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
+            <li><a href="#konser" class="nav-link" data-page="konser">Konser</a></li>
+            <li><a href="#riwayat" class="nav-link" data-page="riwayat">Riwayat Pemesanan</a></li>
+            <li><a href="#kontak" class="nav-link" data-page="kontak">Kontak</a></li>
+            <li><a href="#live-test" class="nav-link" data-page="live-test">Live Test</a></li>
+            <li><a href="#hasil-test" class="nav-link" data-page="hasil-test">Hasil War Test</a></li>
           </ul>
         </nav>
 
         <div class="nav-actions">
-          <button type="button" id="btnToggleSearchPanel" class="btn-icon-search" title="Cari Konser"
-            aria-label="Buka Panel Pencarian" aria-expanded="false" onclick="toggleNavSearchPanel()">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </button>
-
           <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
               stroke-linecap="round" stroke-linejoin="round">
@@ -74,17 +92,58 @@
           </button>
         </div>
 
-        <!-- Panel pencarian turun di samping tombol Masuk (khusus Beranda & Konser) -->
-        <div id="navSearchPanel" class="nav-dropdown-panel nav-search-panel" role="dialog"
-          aria-label="Pencarian Konser">
-          <div class="nav-search-header">
-            <div
-              style="font-family: var(--font-heading); font-size: 18px; font-weight: 900; color: var(--color-forest);">
-              Cari Konser &amp; Filter Tiket</div>
-            <button type="button" class="modal-close-btn" style="position: static; width: 32px; height: 32px;"
-              aria-label="Tutup Panel Pencarian" onclick="closeNavSearchPanel()">&times;</button>
+        <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
+          <div class="nav-account-meta">
+            <div id="dropdownUserName"
+              style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
+              User</div>
+            <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
           </div>
-          <form class="nav-search-form" onsubmit="handleSearchSubmit(event)" autocomplete="off">
+          <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
+            <span>Keluar Akun</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="spaMain">
+      <!-- ==================== HALAMAN 1: BERANDA ==================== -->
+      <div id="page-beranda" class="spa-page" data-page-section="beranda">
+        <!-- HERO BANNER UTAMA -->
+        <header class="hero-card container">
+          <div class="hero-inner">
+            <div class="hero-badge">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path
+                  d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+              </svg>
+              <span>Sistem War Tiket Konser Musik</span>
+            </div>
+
+            <h1 class="hero-title">
+              <span class="hero-line">SISTEM WAR TIKET</span>
+              <span class="hero-line">KONSER MUSIK</span>
+            </h1>
+
+            <p class="hero-subtitle">
+              Cepat, adil, dan stabil bahkan saat ribuan orang war bersamaan.
+            </p>
+
+            <a href="#konser" class="btn-pill-outline" data-page="konser">
+              <span>Lihat Konser</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </a>
+          </div>
+        </header>
+
+        <!-- SATU FORM PENCARIAN UTAMA DI BAWAH BANNER HERO -->
+        <section class="hero-search-section container" aria-label="Pencarian Konser Utama">
+          <form class="hero-search-form" onsubmit="handleSearchSubmit(event)" autocomplete="off">
             <div class="search-field-pill">
               <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -112,135 +171,420 @@
               <span>Cari Tiket</span>
             </button>
           </form>
-        </div>
+        </section>
 
-        <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
-          <div class="nav-account-meta">
-            <div id="dropdownUserName"
-              style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
-              User</div>
-            <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
+        <!-- RINGKASAN SISTEM & MONITORING CLUSTER -->
+        <section id="welcome" class="section-welcome">
+          <div class="container welcome-container">
+            <div class="polaroid-wrapper">
+              <div class="polaroid-frame">
+                <div class="badge-circle-green">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <polyline points="9 12 11 14 15 10" />
+                  </svg>
+                  <span>Aman &amp;<br>Cepat</span>
+                </div>
+
+                <div class="polaroid-photo">
+                  <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80"
+                    alt="Panggung Konser Musik Outdoor" decoding="async">
+                </div>
+
+                <div class="badge-circle-orange" title="Auto-Scaling Cloud Cluster">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div class="welcome-text">
+              <div class="section-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>Platform War Tiket Resmi</span>
+              </div>
+
+              <h2 class="welcome-title">Selamat Datang di SISTEM WAR TIKET KONSER MUSIK</h2>
+              <p class="welcome-desc">
+                Sistem penjualan tiket konser musik dengan arsitektur cloud-native yang adil, stabil, dan anti-down.
+                Menggunakan Docker Swarm Ingress Load Balancing, antrean atomic in-memory Redis Lua, serta pencatatan
+                permanen transaksi ke PostgreSQL. Bebas risiko overselling meski ribuan pengguna bertransaksi serentak.
+              </p>
+
+              <div class="welcome-actions">
+                <button type="button" class="btn-pill-primary" onclick="requireAuthAndOpenWar([1])">
+                  <span>Mulai War</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+                <a href="#konser" class="btn-text-link" data-page="konser">
+                  <span>Lihat Daftar Konser</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </a>
+              </div>
+
+              <div class="cloud-chips-row">
+                <div class="cloud-chip">
+                  <span class="dot-online"></span>
+                  <span>Worker Node: <strong id="liveHostBadge"
+                      class="font-mono selectable-text">Memuat...</strong></span>
+                </div>
+                <div class="cloud-chip">
+                  <span>Redis: <strong id="liveRedisBadge">Connected</strong></span>
+                </div>
+                <div class="cloud-chip">
+                  <span>PostgreSQL 16: <strong id="liveDbBadge">Connected</strong></span>
+                </div>
+              </div>
+            </div>
           </div>
-          <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
-            <span>Keluar Akun</span>
-          </button>
-        </div>
+        </section>
       </div>
-    </header>
 
-    <main>
-      <!-- HERO BANNER UTAMA -->
-      <header id="beranda" class="hero-card container">
-        <div class="hero-inner">
-          <div class="hero-badge">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path
-                d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
-            </svg>
-            <span>Sistem War Tiket Konser Musik</span>
-          </div>
-
-          <h1 class="hero-title">
-            <span class="hero-line">SISTEM WAR TIKET</span>
-            <span class="hero-line">KONSER MUSIK</span>
-          </h1>
-
-          <p class="hero-subtitle">
-            Cepat, adil, dan stabil bahkan saat ribuan orang war bersamaan.
+      <!-- ==================== HALAMAN 2: KONSER ==================== -->
+      <div id="page-konser" class="spa-page" data-page-section="konser">
+        <header class="page-hero-band container">
+          <span class="page-hero-kicker">Katalog Konser Resmi</span>
+          <h1 class="page-hero-title">Konser Sedang Dibuka</h1>
+          <p class="page-hero-subtitle">
+            Cari artis atau filter berdasarkan kota dan tanggal, pilih satu atau beberapa konser sekaligus, lalu amankan kursi Anda.
           </p>
+        </header>
 
-          <a href="/konser" class="btn-pill-outline">
-            <span>Lihat Konser</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </a>
-        </div>
-      </header>
-
-      <!-- RINGKASAN SISTEM & MONITORING CLUSTER -->
-      <section id="welcome" class="section-welcome">
-        <div class="container welcome-container">
-          <div class="polaroid-wrapper">
-            <div class="polaroid-frame">
-              <div class="badge-circle-green">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  <polyline points="9 12 11 14 15 10" />
-                </svg>
-                <span>Aman &amp;<br>Cepat</span>
-              </div>
-
-              <div class="polaroid-photo">
-                <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80"
-                  alt="Panggung Konser Musik Outdoor" decoding="async">
-              </div>
-
-              <div class="badge-circle-orange" title="Auto-Scaling Cloud Cluster">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div class="welcome-text">
-            <div class="section-label">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              <span>Platform War Tiket Resmi</span>
+        <section class="section-concerts">
+          <div class="container">
+            <div id="searchSummaryBar" class="search-summary-bar" role="status">
+              <div id="searchSummaryText" class="search-summary-text"></div>
+              <button type="button" id="btnResetSummary" class="btn-reset-search" onclick="resetSearch()">Reset</button>
             </div>
 
-            <h2 class="welcome-title">Selamat Datang di SISTEM WAR TIKET KONSER MUSIK</h2>
-            <p class="welcome-desc">
-              Sistem penjualan tiket konser musik dengan arsitektur cloud-native yang adil, stabil, dan anti-down.
-              Menggunakan Docker Swarm Ingress Load Balancing, antrean atomic in-memory Redis Lua, serta pencatatan
-              permanen transaksi ke PostgreSQL. Bebas risiko overselling meski ribuan pengguna bertransaksi serentak.
-            </p>
+            <div id="emptySearchState" class="empty-search-state">
+              <div class="empty-state-icon">&#127926;</div>
+              <h3 class="empty-state-title">Konser tidak ditemukan</h3>
+              <p class="empty-state-desc">Coba kata kunci lain, pilih kota berbeda, atau lihat semua jadwal konser yang tersedia.</p>
+              <button type="button" class="btn-pill-primary" onclick="resetSearch()">
+                <span>Lihat Semua Konser</span>
+              </button>
+            </div>
 
-            <div class="welcome-actions">
-              <button type="button" class="btn-pill-primary" onclick="requireAuthAndOpenWar([1])">
-                <span>Mulai War</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
+            <div id="carouselViewport" class="carousel-viewport" tabindex="0" aria-label="Daftar Konser Carousel">
+              <div id="carouselTrack" class="carousel-track"></div>
+            </div>
+
+            <div id="carouselControls" class="carousel-controls">
+              <button type="button" id="carouselPrevBtn" class="carousel-arrow-btn" aria-label="Halaman Sebelumnya" onclick="prevCarouselPage()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
                 </svg>
               </button>
-              <a href="/konser" class="btn-text-link">
-                <span>Lihat Daftar Konser</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </a>
-            </div>
 
-            <div class="cloud-chips-row">
-              <div class="cloud-chip">
-                <span class="dot-online"></span>
-                <span>Worker Node: <strong id="liveHostBadge"
-                    class="font-mono selectable-text">Memuat...</strong></span>
+              <div id="carouselDots" class="pagination-dots" role="tablist" aria-label="Halaman Konser"></div>
+
+              <button type="button" id="carouselNextBtn" class="carousel-arrow-btn" aria-label="Halaman Berikutnya" onclick="nextCarouselPage()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== HALAMAN 3: KONTAK ==================== -->
+      <div id="page-kontak" class="spa-page" data-page-section="kontak">
+        <header class="page-hero-band container">
+          <span class="page-hero-kicker">Pusat Bantuan &amp; Dukungan</span>
+          <h1 class="page-hero-title">Kontak &amp; Layanan Pelanggan</h1>
+          <p class="page-hero-subtitle">
+            Tim dukungan wartiketkonser.id siap membantu kendala akun, verifikasi transaksi, hingga cetak E-Ticket resmi Anda.
+          </p>
+        </header>
+
+        <section class="section-contact">
+          <div class="container">
+            <div class="contact-grid">
+              <div class="contact-card">
+                <h2 class="modal-title" style="font-size: 26px;">Informasi Kontak Resmi</h2>
+                <p class="modal-subtitle">Saluran resmi bantuan teknis dan demo sistem Tugas Besar Cloud Computing.</p>
+
+                <ul class="contact-list">
+                  <li class="contact-list-item">
+                    <span class="eticket-label">Email Layanan Pelanggan</span>
+                    <strong class="eticket-value selectable-text">support@wartiketkonser.id</strong>
+                  </li>
+                  <li class="contact-list-item">
+                    <span class="eticket-label">Jam Operasional Helpdesk War</span>
+                    <strong class="eticket-value">Setiap Hari, 08:00 - 22:00 WIB</strong>
+                  </li>
+                  <li class="contact-list-item">
+                    <span class="eticket-label">Domain &amp; Infrastruktur</span>
+                    <strong class="eticket-value selectable-text">wartiketkonser.id (Docker Swarm Mesh &bull; Nginx &bull; Redis &bull; Postgres)</strong>
+                  </li>
+                  <li class="contact-list-item">
+                    <span class="eticket-label">Tim Pengembang</span>
+                    <strong class="eticket-value">Kelompok 1 Cloud Computing &bull; 2026</strong>
+                  </li>
+                </ul>
+
+                <div class="modal-actions-row" style="margin-top: 22px;">
+                  <button type="button" class="btn-pill-primary" style="flex: 1;" onclick="openLoginModal()">
+                    <span>Masuk Akun Demo</span>
+                  </button>
+                  <button type="button" class="btn-pill-outline btn-pill-outline-dark" onclick="resetSystemStock()">
+                    Reset Kuota Demo
+                  </button>
+                </div>
               </div>
-              <div class="cloud-chip">
-                <span>Redis: <strong id="liveRedisBadge">Connected</strong></span>
-              </div>
-              <div class="cloud-chip">
-                <span>PostgreSQL 16: <strong id="liveDbBadge">Connected</strong></span>
+
+              <div class="contact-card">
+                <h2 class="modal-title" style="font-size: 26px;">Pusat Bantuan Cepat (FAQ)</h2>
+                <p class="modal-subtitle">Pertanyaan umum seputar alur war tiket dan pencetakan E-Ticket.</p>
+
+                <div class="contact-faq-list">
+                  <div class="contact-faq-item">
+                    <h3 class="contact-faq-q">Mengapa saya diminta login sebelum memilih kursi?</h3>
+                    <p class="contact-faq-a">Untuk menjaga keadilan antrean war tiket serta memastikan identitas penonton tercetak valid di Order ID &amp; E-Ticket Resmi.</p>
+                  </div>
+
+                  <div class="contact-faq-item">
+                    <h3 class="contact-faq-q">Apakah dua orang bisa mendapatkan nomor kursi yang sama?</h3>
+                    <p class="contact-faq-a">Tidak. Sistem menggunakan skrip atomic Redis Lua serta transaksi ACID PostgreSQL sehingga kursi yang sudah dikunci langsung tertutup bagi pengguna lain.</p>
+                  </div>
+
+                  <div class="contact-faq-item">
+                    <h3 class="contact-faq-q">Bagaimana cara membeli beberapa konser sekaligus?</h3>
+                    <p class="contact-faq-a">Di halaman Konser, centang tombol Pilih pada beberapa kartu konser lalu klik War Terpilih Sekarang di bilah bawah.</p>
+                  </div>
+
+                  <div class="contact-faq-item">
+                    <h3 class="contact-faq-q">Bagaimana hasil cetak E-Ticket PDF terlihat?</h3>
+                    <p class="contact-faq-a">Klik Cetak / PDF setelah pembayaran sukses. Navigasi, tombol, dan ID worker server otomatis disembunyikan agar tercetak bersih dalam 1 halaman A4.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
+      <!-- ==================== HALAMAN 4: RIWAYAT PEMESANAN ==================== -->
+      <div id="page-riwayat" class="spa-page" data-page-section="riwayat">
+        <header class="page-hero-band container">
+          <span class="page-hero-kicker">Order History Terverifikasi JWT</span>
+          <h1 class="page-hero-title">Riwayat Pemesanan Tiket</h1>
+          <p class="page-hero-subtitle">
+            Daftar transaksi tiket resmi yang tersimpan secara permanen di PostgreSQL (`bookings`, `booking_details`, `seats`, dan `concerts`).
+          </p>
+        </header>
+
+        <section class="section-orders">
+          <div class="container">
+            <div class="panel-card">
+              <div class="panel-toolbar">
+                <div>
+                  <h2 class="modal-title" style="font-size: 24px;">Tiket &amp; Pesanan Saya</h2>
+                  <p id="ordersSubtitle" class="modal-subtitle">Menampilkan riwayat pemesanan akun aktif.</p>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button type="button" class="btn-pill-outline btn-pill-outline-dark" onclick="fetchMyOrders()">
+                    <span>Muat Ulang Riwayat</span>
+                  </button>
+                  <a href="#konser" class="btn-pill-primary" data-page="konser">
+                    <span>War Tiket Lagi</span>
+                  </a>
+                </div>
+              </div>
+
+              <div id="ordersContent">
+                <div class="catalog-loading-state">
+                  <span>Silakan masuk akun untuk melihat riwayat pemesanan Anda.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== HALAMAN 5: LIVE STRESS TEST / SIMULASI WAR ==================== -->
+      <div id="page-live-test" class="spa-page" data-page-section="live-test">
+        <header class="page-hero-band container">
+          <span class="page-hero-kicker">Simulasi High-Concurrency Real-Time</span>
+          <h1 class="page-hero-title">Live Stress Test &amp; Load Balancer</h1>
+          <p class="page-hero-subtitle">
+            Uji lonjakan request secara simultan langsung dari browser untuk memantau SLA (&lt; 200ms, Error &lt; 1%) serta distribusi worker container Docker Swarm.
+          </p>
+        </header>
+
+        <section class="section-stress">
+          <div class="container">
+            <div class="panel-card">
+              <div class="panel-toolbar">
+                <div>
+                  <h2 class="modal-title" style="font-size: 24px;">Kontrol Simulasi War Tiket</h2>
+                  <p class="modal-subtitle">Mengukur response time (ms), status SLA, 200 OK vs 409 Conflict, dan penyebaran container Nginx.</p>
+                </div>
+                <span id="stressSlaBadge" class="sla-badge is-pass">Siap Diuji (Target SLA &lt; 200ms)</span>
+              </div>
+
+              <div class="stress-controls-grid">
+                <div>
+                  <label class="form-label" for="stressCountSelect">Jumlah Simulasi Concurrent Requests</label>
+                  <select id="stressCountSelect" class="stress-select">
+                    <option value="10">10 Concurrent Requests (Browser Direct)</option>
+                    <option value="100" selected>100 Concurrent Requests (Cluster Burst)</option>
+                    <option value="500">500 Concurrent Requests (Cluster Burst)</option>
+                    <option value="1000">1.000 Concurrent Requests (Peak War)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="form-label" for="stressConcertSelect">Target Konser</label>
+                  <select id="stressConcertSelect" class="stress-select">
+                    <option value="1">1. Coldplay - Music of the Spheres</option>
+                    <option value="2">2. Sheila on 7 - Tunggu Aku Di Jakarta</option>
+                    <option value="3">3. Taylor Swift - The Eras Tour Jakarta</option>
+                  </select>
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button type="button" id="btnStartStressTest" class="btn-pill-primary" onclick="runLiveStressTest()">
+                    <span>Mulai War Test</span>
+                  </button>
+                  <button type="button" id="btnResetStressTest" class="btn-pill-outline btn-pill-outline-dark"
+                    onclick="resetSystemStock({ skipConfirm: true, sourceBtn: this })">
+                    <span>Reset Kuota</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="stressQuotaStrip" class="stress-quota-strip" role="status" aria-label="Status Kuota Kursi">
+                <span class="stress-quota-label">Kuota Kursi Live:</span>
+                <div id="stressQuotaBadges" class="stress-quota-badges">
+                  <span class="stress-quota-chip">Konser #1: <strong>Memuat...</strong></span>
+                </div>
+              </div>
+
+              <div class="stress-metrics-grid">
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Rata-Rata Latency</span>
+                  <strong id="stressAvgLatency" class="stress-metric-val">0 ms</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Berhasil (200 OK)</span>
+                  <strong id="stressOkCount" class="stress-metric-val">0</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Rebutan / Habis (409)</span>
+                  <strong id="stressConflictCount" class="stress-metric-val">0</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Server Error Rate (5xx)</span>
+                  <strong id="stressErrorRate" class="stress-metric-val">0%</strong>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="demo-accounts-title" style="margin-bottom: 12px;">Distribusi Container Node Worker (Nginx Round-Robin):</h3>
+                <div id="stressWorkerDist" class="worker-dist-list">
+                  <div style="color: var(--color-text-muted); font-size: 14px;">Belum ada pengujian dijalankan. Klik <strong>Mulai War Test</strong> untuk melihat distribusi worker node secara langsung.</div>
+                </div>
+                <div style="margin-top: 18px; display: flex; justify-content: flex-end;">
+                  <a href="#hasil-test" class="btn-text-link" data-page="hasil-test">
+                    <span>Lihat Detail &amp; Riwayat di Menu Hasil War Test</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== HALAMAN 6: HASIL WAR TEST & AUDIT SLA ==================== -->
+      <div id="page-hasil-test" class="spa-page" data-page-section="hasil-test">
+        <header class="page-hero-band container">
+          <span class="page-hero-kicker">Rekapitulasi &amp; Audit Performa</span>
+          <h1 class="page-hero-title">Hasil War Test &amp; Riwayat SLA</h1>
+          <p class="page-hero-subtitle">
+            Pantau ringkasan hasil terbaru beserta riwayat seluruh simulasi <strong>Mulai War Test</strong> (Latency, Status SLA &lt; 200ms, 200 OK vs 409 Conflict, dan sebaran container worker).
+          </p>
+        </header>
+
+        <section class="section-results">
+          <div class="container">
+            <div class="panel-card">
+              <div class="panel-toolbar">
+                <div>
+                  <h2 class="modal-title" style="font-size: 24px;">Ringkasan Hasil Pengujian Terbaru</h2>
+                  <p id="hasilSummarySubtitle" class="modal-subtitle">Menampilkan hasil terakhir yang dijalankan dari menu Live Test.</p>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <span id="hasilLatestSlaBadge" class="sla-badge is-pass">Belum Ada Data</span>
+                  <a href="#live-test" class="btn-pill-primary" data-page="live-test">
+                    <span>Jalankan War Test</span>
+                  </a>
+                  <button type="button" id="btnClearWarHistory" class="btn-pill-outline btn-pill-outline-dark"
+                    onclick="clearWarTestHistory()">
+                    <span>Bersihkan Riwayat</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="stress-metrics-grid">
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Simulasi Terakhir</span>
+                  <strong id="hasilLatestCount" class="stress-metric-val">0 req</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Avg / p(95) Latency</span>
+                  <strong id="hasilLatestLatency" class="stress-metric-val">0 ms</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">200 OK / 409 Conflict</span>
+                  <strong id="hasilLatestOutcomes" class="stress-metric-val">0 / 0</strong>
+                </div>
+                <div class="stress-metric-card">
+                  <span class="stress-metric-label">Error Rate &amp; Node</span>
+                  <strong id="hasilLatestErrorNodes" class="stress-metric-val">0%</strong>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 28px;">
+                <h3 class="demo-accounts-title" style="margin-bottom: 12px;">Distribusi Worker Node pada Pengujian Terbaru:</h3>
+                <div id="hasilWorkerDist" class="worker-dist-list">
+                  <div style="color: var(--color-text-muted); font-size: 14px;">Belum ada hasil pengujian tersimpan.</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="demo-accounts-title" style="margin-bottom: 12px;">Riwayat Eksekusi Mulai War Test:</h3>
+                <div id="warTestHistoryWrap" class="orders-table-wrap">
+                  <div class="catalog-loading-state">
+                    <span>Belum ada riwayat pengujian. Buka menu <strong>Live Test</strong> lalu klik <strong>Mulai War Test</strong>.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
 
     <!-- FOOTER -->
@@ -270,9 +614,12 @@
           <div>
             <h4 class="footer-col-title">Navigasi Halaman</h4>
             <ul class="footer-links">
-              <li><a href="/">Beranda</a></li>
-              <li><a href="/konser">Daftar Konser</a></li>
-              <li><a href="/kontak">Kontak &amp; Bantuan</a></li>
+              <li><a href="#beranda" data-page="beranda">Beranda</a></li>
+              <li><a href="#konser" data-page="konser">Daftar Konser</a></li>
+              <li><a href="#riwayat" data-page="riwayat">Riwayat Pemesanan</a></li>
+              <li><a href="#kontak" data-page="kontak">Kontak &amp; Bantuan</a></li>
+              <li><a href="#live-test" data-page="live-test">Live Stress Test</a></li>
+              <li><a href="#hasil-test" data-page="hasil-test">Hasil War Test</a></li>
             </ul>
           </div>
 

@@ -7,6 +7,7 @@
 
 const DESIGN_W = 1440;
 let activeScale = 1;
+let lastFitSignature = '';
 var stateReady = false;
 
 function getScale() {
@@ -27,23 +28,32 @@ function fit() {
   const stage = document.getElementById('stage');
   if (!stage) return;
 
+  const cw = document.documentElement.clientWidth || DESIGN_W;
+  const ch = document.documentElement.clientHeight || 900;
   const mobile = isMobileViewport();
+  const nextSig = `${mobile ? 'm' : 'd'}:${cw}:${ch}`;
+  if (nextSig === lastFitSignature && stateReady) return;
+  lastFitSignature = nextSig;
+
+  document.documentElement.classList.toggle('wt-mobile', mobile);
   document.body?.classList.toggle('is-mobile', mobile);
 
   const modalRoot = document.getElementById('modalRoot');
   if (mobile) {
     activeScale = 1;
     document.documentElement.style.setProperty('--s', '1');
-    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(document.documentElement.clientHeight)}px`);
+    document.documentElement.style.setProperty('--boot-zoom', '1');
+    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch)}px`);
     stage.style.zoom = '';
     stage.style.transform = '';
     document.body.style.height = '';
     if (modalRoot) modalRoot.style.transform = '';
   } else {
-    const s = document.documentElement.clientWidth / DESIGN_W;
+    const s = cw / DESIGN_W;
     activeScale = s;
     document.documentElement.style.setProperty('--s', String(s));
-    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(document.documentElement.clientHeight / s)}px`);
+    document.documentElement.style.setProperty('--boot-zoom', String(s));
+    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
 
     // Modal root berada di luar #stage agar overlay tetap penuh di semua skala zoom
     if (modalRoot) modalRoot.style.transform = `scale(${s})`;
@@ -63,14 +73,13 @@ function fit() {
   if (stateReady && state.cardsPerPage !== nextPerPage) {
     state.cardsPerPage = nextPerPage;
     state.currentPage = 0;
-    if (state.allConcerts.length > 0) renderCarousel();
+    if (state.activePage === 'konser' && state.allConcerts.length > 0) renderCarousel();
   }
 }
 
 fit();
 ['resize', 'load'].forEach((ev) => addEventListener(ev, fit));
 visualViewport?.addEventListener('resize', fit);
-document.fonts?.ready?.then(fit);
 
 // Lapisan tambahan: cegah shortcut zoom Ctrl+scroll & Ctrl+/-/0 di halaman
 window.addEventListener(
@@ -212,7 +221,11 @@ const SAMPLE_CONCERTS = [
 ];
 
 const state = {
+  activePage: 'beranda',
+  concertsLoaded: false,
+
   currentUser: null,
+  jwtToken: null,
   pendingWarConcertIds: null,
   lastWorkerHost: 'swarm-worker',
 
@@ -240,17 +253,27 @@ const state = {
   isLoggingIn: false,
   isCheckingOut: false,
   isResetting: false,
+  isRunningStressTest: false,
+
+  warTestHistory: [],
 };
 stateReady = true;
 
-// Restore persisted auth user & selected concerts across reloads
+// Restore persisted auth user, JWT token, selected concerts & war test results across reloads
 try {
   const savedUser = sessionStorage.getItem('wartiket_user');
   if (savedUser) state.currentUser = JSON.parse(savedUser);
+  const savedJwt = sessionStorage.getItem('wartiket_jwt');
+  if (savedJwt) state.jwtToken = savedJwt;
   const savedIds = sessionStorage.getItem('wartiket_selected_concerts');
   if (savedIds) {
     const parsed = JSON.parse(savedIds);
     if (Array.isArray(parsed)) state.selectedConcertIds = parsed;
+  }
+  const savedHistory = sessionStorage.getItem('wartiket_war_test_history');
+  if (savedHistory) {
+    const parsedHistory = JSON.parse(savedHistory);
+    if (Array.isArray(parsedHistory)) state.warTestHistory = parsedHistory;
   }
 } catch (e) {
   // Ignore sessionStorage parse errors
@@ -406,9 +429,30 @@ async function pollHealth() {
 // 5. CONCERT DATA LOADING, FILTER DROPDOWNS & CAROUSEL ENGINE
 // ============================================================================
 
-async function fetchConcerts() {
+let concertsFetchController = null;
+let concertsFetchPromise = null;
+
+async function fetchConcerts({ force = false, render = isConcertsPage() } = {}) {
+  if (state.concertsLoaded && !force && state.allConcerts.length > 0) {
+    if (render) {
+      readSearchParamsFromUrl();
+      applyFilters();
+    }
+    return state.allConcerts;
+  }
+
+  if (concertsFetchPromise && !force) {
+    return concertsFetchPromise;
+  }
+
+  if (concertsFetchController) {
+    concertsFetchController.abort();
+  }
+  concertsFetchController = new AbortController();
+  const activeController = concertsFetchController;
+
   const track = document.getElementById('carouselTrack');
-  if (track && state.allConcerts.length === 0) {
+  if (render && track && state.allConcerts.length === 0) {
     track.innerHTML = `
       <div class="catalog-loading-state">
         <span class="ui-spinner ui-spinner-lg"></span>
@@ -417,82 +461,99 @@ async function fetchConcerts() {
     `;
   }
 
-  let dbConcerts = [];
-  try {
-    const { res, data } = await fetchJsonWithTimeout('/api/concerts', { cache: 'no-store' }, 6000);
-    if (res.ok && Array.isArray(data)) {
-      dbConcerts = data;
+  concertsFetchPromise = (async () => {
+    let dbConcerts = [];
+    try {
+      const { res, data } = await fetchJsonWithTimeout(
+        '/api/concerts',
+        { cache: 'no-store', signal: activeController.signal },
+        6000
+      );
+      if (res.ok && Array.isArray(data)) {
+        dbConcerts = data;
+      }
+    } catch (err) {
+      if (err.isExternalAbort) return state.allConcerts;
+      // Fallback below if network temporarily unreachable
     }
-  } catch (err) {
-    // Fallback below if network temporarily unreachable
-  }
 
-  if (dbConcerts.length === 0) {
-    dbConcerts = [
-      {
-        id: 1,
-        title: 'Coldplay - Music of the Spheres World Tour',
-        artist: 'Coldplay',
-        venue: 'Stadion Utama Gelora Bung Karno (GBK), Jakarta',
-        city: 'Jakarta',
-        concertDate: '15 Desember 2026, 19:30 WIB',
-        price: 1500000,
-        totalSeats: 500,
-        availableSeats: 495,
-        imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=900&q=80',
-      },
-      {
-        id: 2,
-        title: 'Sheila on 7 - Tunggu Aku Di Jakarta',
-        artist: 'Sheila on 7',
-        venue: 'JIExpo Kemayoran Open Space, Jakarta',
-        city: 'Jakarta',
-        concertDate: '20 Januari 2027, 20:00 WIB',
-        price: 750000,
-        totalSeats: 500,
-        availableSeats: 497,
-        imageUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=900&q=80',
-      },
-      {
-        id: 3,
-        title: 'Taylor Swift - The Eras Tour Jakarta',
-        artist: 'Taylor Swift',
-        venue: 'Jakarta International Stadium (JIS), Jakarta',
-        city: 'Jakarta',
-        concertDate: '28 Februari 2027, 19:00 WIB',
-        price: 2250000,
-        totalSeats: 500,
-        availableSeats: 496,
-        imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=80',
-      },
-    ];
-  }
+    if (dbConcerts.length === 0) {
+      dbConcerts = [
+        {
+          id: 1,
+          title: 'Coldplay - Music of the Spheres World Tour',
+          artist: 'Coldplay',
+          venue: 'Stadion Utama Gelora Bung Karno (GBK), Jakarta',
+          city: 'Jakarta',
+          concertDate: '15 Desember 2026, 19:30 WIB',
+          price: 1500000,
+          totalSeats: 500,
+          availableSeats: 495,
+          imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=900&q=80',
+        },
+        {
+          id: 2,
+          title: 'Sheila on 7 - Tunggu Aku Di Jakarta',
+          artist: 'Sheila on 7',
+          venue: 'JIExpo Kemayoran Open Space, Jakarta',
+          city: 'Jakarta',
+          concertDate: '20 Januari 2027, 20:00 WIB',
+          price: 750000,
+          totalSeats: 500,
+          availableSeats: 497,
+          imageUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=900&q=80',
+        },
+        {
+          id: 3,
+          title: 'Taylor Swift - The Eras Tour Jakarta',
+          artist: 'Taylor Swift',
+          venue: 'Jakarta International Stadium (JIS), Jakarta',
+          city: 'Jakarta',
+          concertDate: '28 Februari 2027, 19:00 WIB',
+          price: 2250000,
+          totalSeats: 500,
+          availableSeats: 496,
+          imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=80',
+        },
+      ];
+    }
 
-  let merged = dbConcerts.map((c) => ({
-    ...c,
-    city: extractCity(c),
-    dateLabel: extractDateLabel(c.concertDate),
-    isSample: Boolean(c.isSample),
-  }));
+    let merged = dbConcerts.map((c) => ({
+      ...c,
+      city: extractCity(c),
+      dateLabel: extractDateLabel(c.concertDate),
+      isSample: Boolean(c.isSample),
+    }));
 
-  // Tambahkan data contoh jika kurang dari 10 konser agar carousel 4 halaman dapat diuji
-  if (merged.length < 10) {
-    const existingIds = new Set(merged.map((c) => c.id));
-    for (const sample of SAMPLE_CONCERTS) {
-      if (!existingIds.has(sample.id)) {
-        merged.push({
-          ...sample,
-          dateLabel: extractDateLabel(sample.concertDate),
-        });
+    // Tambahkan data contoh jika kurang dari 10 konser agar carousel 4 halaman dapat diuji
+    if (merged.length < 10) {
+      const existingIds = new Set(merged.map((c) => c.id));
+      for (const sample of SAMPLE_CONCERTS) {
+        if (!existingIds.has(sample.id)) {
+          merged.push({
+            ...sample,
+            dateLabel: extractDateLabel(sample.concertDate),
+          });
+        }
       }
     }
-  }
 
-  state.allConcerts = merged;
-  populateFilterDropdowns();
-  readSearchParamsFromUrl();
-  applyFilters();
-  renderMultiSelectBar();
+    state.allConcerts = merged;
+    state.concertsLoaded = true;
+    populateFilterDropdowns();
+
+    // Hanya render carousel jika user memang sedang berada di halaman Konser
+    if (isConcertsPage()) {
+      readSearchParamsFromUrl();
+      applyFilters();
+      renderMultiSelectBar();
+    }
+    return state.allConcerts;
+  })().finally(() => {
+    concertsFetchPromise = null;
+  });
+
+  return concertsFetchPromise;
 }
 
 function populateSelectOptions(id, placeholder, values, selectedValue) {
@@ -504,9 +565,19 @@ function populateSelectOptions(id, placeholder, values, selectedValue) {
   sel.value = selectedValue;
 }
 
-function populateFilterDropdowns() {
-  const cities = Array.from(new Set(state.allConcerts.map((c) => c.city).filter(Boolean))).sort();
-  const dates = Array.from(new Set(state.allConcerts.map((c) => c.dateLabel).filter(Boolean)));
+function populateFilterDropdowns(sourceList = null) {
+  const list = Array.isArray(sourceList) && sourceList.length > 0
+    ? sourceList
+    : (state.allConcerts.length > 0
+      ? state.allConcerts
+      : [
+          { city: 'Jakarta', dateLabel: '15 Desember 2026' },
+          { city: 'Jakarta', dateLabel: '20 Januari 2027' },
+          { city: 'Jakarta', dateLabel: '28 Februari 2027' },
+          ...SAMPLE_CONCERTS.map((c) => ({ ...c, dateLabel: extractDateLabel(c.concertDate) })),
+        ]);
+  const cities = Array.from(new Set(list.map((c) => c.city).filter(Boolean))).sort();
+  const dates = Array.from(new Set(list.map((c) => c.dateLabel).filter(Boolean)));
 
   populateSelectOptions('cityFilter', 'Semua Kota', cities, state.selectedCity);
   populateSelectOptions('dateFilter', 'Semua Tanggal', dates, state.selectedDate);
@@ -718,8 +789,9 @@ function initCarouselInteractions() {
   );
   viewport.addEventListener('touchend', onEnd);
 
-  // Navigasi keyboard panah kiri/kanan (saat tidak mengetik di input atau modal terbuka)
+  // Navigasi keyboard panah kiri/kanan (khusus saat halaman Konser aktif & modal tertutup)
   window.addEventListener('keydown', (e) => {
+    if (!isConcertsPage()) return;
     const activeTag = document.activeElement?.tagName;
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
     if (document.querySelector('.modal-overlay.active')) return;
@@ -736,7 +808,7 @@ function initCarouselInteractions() {
 // ============================================================================
 
 function isConcertsPage() {
-  return Boolean(document.getElementById('carouselTrack'));
+  return state.activePage === 'konser';
 }
 
 function readSearchInputs() {
@@ -748,6 +820,8 @@ function readSearchInputs() {
 function readSearchParamsFromUrl() {
   if (!isConcertsPage()) return;
   const params = new URLSearchParams(window.location.search || '');
+  if (!params.has('q') && !params.has('city') && !params.has('date')) return;
+
   state.searchQuery = params.get('q') || '';
   state.selectedCity = params.get('city') || '';
   state.selectedDate = params.get('date') || '';
@@ -766,7 +840,7 @@ function buildConcertsSearchUrl() {
   if (state.selectedCity.trim()) params.set('city', state.selectedCity.trim());
   if (state.selectedDate.trim()) params.set('date', state.selectedDate.trim());
   const qs = params.toString();
-  return qs ? `/konser?${qs}` : '/konser';
+  return qs ? `/?${qs}#konser` : '#konser';
 }
 
 function applyFilters({ syncUrl = false } = {}) {
@@ -836,12 +910,13 @@ function resetSearch() {
 function handleSearchSubmit(e) {
   e.preventDefault();
   readSearchInputs();
-  closeNavSearchPanel();
+  closeAllAutocompletes();
 
   if (isConcertsPage()) {
     applyFilters({ syncUrl: true });
   } else {
-    window.location.href = buildConcertsSearchUrl();
+    window.history.replaceState(null, '', buildConcertsSearchUrl());
+    switchPage('konser', { updateHash: false });
   }
 }
 
@@ -906,15 +981,20 @@ function attachAutocomplete(inputId, dropdownId) {
   function pickSuggestion(concert) {
     input.value = concert.artist;
     readSearchInputs();
-    closeNavSearchPanel();
+    closeAllAutocompletes();
     activeIndex = -1;
 
     if (isConcertsPage()) {
       applyFilters({ syncUrl: true });
     } else {
-      window.location.href = buildConcertsSearchUrl();
+      window.history.replaceState(null, '', buildConcertsSearchUrl());
+      switchPage('konser', { updateHash: false });
     }
   }
+
+  input.addEventListener('focus', () => {
+    if (!state.concertsLoaded) fetchConcerts({ render: false });
+  });
 
   input.addEventListener('input', () => {
     readSearchInputs();
@@ -942,39 +1022,18 @@ function attachAutocomplete(inputId, dropdownId) {
   });
 }
 
-function toggleNavSearchPanel() {
-  const panel = document.getElementById('navSearchPanel');
-  const btn = document.getElementById('btnToggleSearchPanel');
-  if (!panel) return;
-  const willOpen = !panel.classList.contains('active');
-  closeNavAccountDropdown();
-  if (willOpen) {
-    panel.classList.add('active');
-    btn?.setAttribute('aria-expanded', 'true');
-    setTimeout(() => document.getElementById('searchInput')?.focus(), 40);
-  } else {
-    closeNavSearchPanel();
-  }
-}
-
-function closeNavSearchPanel() {
-  document.getElementById('navSearchPanel')?.classList.remove('active');
-  document.getElementById('btnToggleSearchPanel')?.setAttribute('aria-expanded', 'false');
-  closeAllAutocompletes();
-}
-
 function closeNavAccountDropdown() {
   document.getElementById('navAccountDropdown')?.classList.remove('active');
 }
 
 function toggleNavAccountDropdown() {
-  closeNavSearchPanel();
+  closeAllAutocompletes();
   document.getElementById('navAccountDropdown')?.classList.toggle('active');
 }
 
 function handleAuthNavClick() {
   if (!state.currentUser) {
-    closeNavSearchPanel();
+    closeAllAutocompletes();
     openLoginModal();
   } else {
     toggleNavAccountDropdown();
@@ -982,18 +1041,54 @@ function handleAuthNavClick() {
 }
 
 // ============================================================================
-// 7. INDIKATOR MENU AKTIF MULTI-HALAMAN (MULTI-PAGE ROUTE HIGHLIGHT)
+// 7. ROUTING SPA BERBASIS HASH (#beranda, #konser, #kontak) & CLEANUP TIMER
 // ============================================================================
 
-function getCurrentRouteKey() {
+const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-test'];
+let ordersAbortController = null;
+let stressTestController = null;
+
+function resolvePageFromLocation() {
+  const hash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+  if (VALID_SPA_PAGES.includes(hash)) return hash;
+
   const path = (window.location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
   if (path === '/konser' || path === '/concerts.html') return 'konser';
+  if (path === '/riwayat') return 'riwayat';
   if (path === '/kontak' || path === '/contact.html') return 'kontak';
+  if (path === '/live-test') return 'live-test';
+  if (path === '/hasil-test') return 'hasil-test';
   return 'beranda';
 }
 
-function syncActiveNavByRoute() {
-  const activeKey = getCurrentRouteKey();
+function stopTicketBookingTimers(targetPage) {
+  stopQueuePolling();
+  if (seatFetchController) {
+    seatFetchController.abort();
+    seatFetchController = null;
+  }
+  if (checkoutAbortController) {
+    checkoutAbortController.abort();
+    checkoutAbortController = null;
+  }
+  if (concertsFetchController && targetPage !== 'konser') {
+    concertsFetchController.abort();
+    concertsFetchController = null;
+  }
+  if (ordersAbortController && targetPage !== 'riwayat') {
+    ordersAbortController.abort();
+    ordersAbortController = null;
+  }
+  if (stressTestController && targetPage !== 'live-test') {
+    stressTestController.abort();
+    stressTestController = null;
+  }
+  if (document.getElementById('warModal')?.classList.contains('active')) {
+    closeWarModal();
+  }
+}
+
+function syncActiveNavByRoute(activeKey = state.activePage) {
   document.querySelectorAll('.nav-link[data-page]').forEach((link) => {
     const isCurrent = link.dataset.page === activeKey;
     link.classList.toggle('active', isCurrent);
@@ -1002,6 +1097,78 @@ function syncActiveNavByRoute() {
     } else {
       link.removeAttribute('aria-current');
     }
+  });
+}
+
+function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
+  const normalized = String(pageName || '').replace(/^#\/?/, '').toLowerCase();
+  const targetPage = VALID_SPA_PAGES.includes(normalized) ? normalized : 'beranda';
+
+  closeNavAccountDropdown();
+  closeAllAutocompletes();
+
+  // Hentikan timer/polling pemesanan tiket & batalkan fetch tertunda saat berpindah halaman
+  stopTicketBookingTimers(targetPage);
+
+  state.activePage = targetPage;
+  document.documentElement.setAttribute('data-active-page', targetPage);
+
+  // Sembunyikan seluruh section halaman lain secara instan dan tampilkan target
+  document.querySelectorAll('.spa-page[data-page-section]').forEach((section) => {
+    const isTarget = section.dataset.pageSection === targetPage;
+    section.classList.toggle('is-active', isTarget);
+    section.classList.toggle('hidden', !isTarget);
+    section.hidden = !isTarget;
+  });
+
+  syncActiveNavByRoute(targetPage);
+  renderMultiSelectBar();
+
+  if (updateHash) {
+    const nextHash = `#${targetPage}`;
+    const nextUrl = window.location.pathname !== '/' ? `/${nextHash}` : nextHash;
+    if (window.location.hash !== nextHash || window.location.pathname !== '/') {
+      window.history.pushState({ page: targetPage }, '', nextUrl);
+    }
+  }
+
+  if (targetPage === 'konser') {
+    if (!state.concertsLoaded || forceRefresh) {
+      fetchConcerts({ force: forceRefresh, render: true });
+    } else {
+      readSearchParamsFromUrl();
+      applyFilters();
+      updateCarouselPosition(false);
+    }
+  } else if (targetPage === 'riwayat') {
+    fetchMyOrders();
+  } else if (targetPage === 'live-test') {
+    refreshLiveTestQuota();
+  } else if (targetPage === 'hasil-test') {
+    renderHasilWarTestPage();
+  }
+
+  fit();
+  if (scrollToTop) {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
+
+function initSpaNavigation() {
+  document.addEventListener('click', (e) => {
+    const navTarget = e.target.closest('a[data-page]');
+    if (!navTarget) return;
+    e.preventDefault();
+    const targetPage = navTarget.dataset.page || navTarget.getAttribute('href') || 'beranda';
+    switchPage(targetPage);
+  });
+
+  window.addEventListener('hashchange', () => {
+    switchPage(resolvePageFromLocation(), { updateHash: false });
+  });
+
+  window.addEventListener('popstate', () => {
+    switchPage(resolvePageFromLocation(), { updateHash: false });
   });
 }
 
@@ -1043,7 +1210,7 @@ function renderMultiSelectBar() {
     .map((id) => state.allConcerts.find((c) => c.id === id))
     .filter(Boolean);
 
-  if (selectedList.length === 0) {
+  if (!isConcertsPage() || selectedList.length === 0) {
     bar.classList.remove('active');
     chipsEl.innerHTML = '';
     return;
@@ -1093,7 +1260,7 @@ function requireAuthAndOpenWar(concertIds) {
 // ============================================================================
 
 function openLoginModal() {
-  closeNavSearchPanel();
+  closeAllAutocompletes();
   closeNavAccountDropdown();
   const modal = document.getElementById('loginModal');
   if (modal) modal.classList.add('active');
@@ -1142,13 +1309,19 @@ async function handleLogin(e) {
     }
 
     state.currentUser = data.user;
+    state.jwtToken = data.jwtToken || null;
     try {
       sessionStorage.setItem('wartiket_user', JSON.stringify(data.user));
+      if (data.jwtToken) sessionStorage.setItem('wartiket_jwt', data.jwtToken);
     } catch (err) {}
 
     updateAuthUI();
     closeLoginModal();
     showToast(`Selamat datang, ${data.user.name}!`);
+
+    if (state.activePage === 'riwayat') {
+      fetchMyOrders();
+    }
 
     if (state.pendingWarConcertIds && state.pendingWarConcertIds.length > 0) {
       const nextIds = [...state.pendingWarConcertIds];
@@ -1168,14 +1341,19 @@ async function handleLogin(e) {
 
 function handleLogout() {
   state.currentUser = null;
+  state.jwtToken = null;
   state.pendingWarConcertIds = null;
   try {
     sessionStorage.removeItem('wartiket_user');
+    sessionStorage.removeItem('wartiket_jwt');
   } catch (e) {}
   fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
   updateAuthUI();
   closeNavAccountDropdown();
   closeWarModal();
+  if (state.activePage === 'riwayat') {
+    fetchMyOrders();
+  }
   showToast('Anda telah keluar dari akun.');
 }
 
@@ -1396,7 +1574,7 @@ function clearWarFeedback() {
 }
 
 async function openWarModal(concertIdsOrId) {
-  closeNavSearchPanel();
+  closeAllAutocompletes();
   closeNavAccountDropdown();
   const ids = Array.isArray(concertIdsOrId) ? concertIdsOrId : [concertIdsOrId];
   state.warQueueIds = ids;
@@ -1715,8 +1893,11 @@ async function executeCheckout() {
     displayETicket(data.ticket, data.servedBy);
     state.queueToken = null;
     state.queueStatus = null;
+    state.concertsLoaded = false;
     showToast('Pembayaran Lunas! E-Ticket resmi telah terbit.');
-    fetchConcerts();
+    if (isConcertsPage()) {
+      fetchConcerts({ force: true, render: true });
+    }
   } catch (err) {
     if (err.isExternalAbort) return;
     const errMsg = err.message || 'Terjadi gangguan koneksi saat memproses checkout.';
@@ -1754,9 +1935,78 @@ function displayETicket(t, host) {
   document.getElementById('ticketPrice').textContent = `Rp ${Number(t.amount || state.selectedSeat?.price || 0).toLocaleString('id-ID')}`;
 }
 
-async function resetSystemStock() {
+function renderStressQuotaBadges(quotas) {
+  const wrap = document.getElementById('stressQuotaBadges');
+  if (!wrap || !Array.isArray(quotas) || quotas.length === 0) return;
+
+  wrap.innerHTML = quotas
+    .slice(0, 3)
+    .map((q) => {
+      const avail = Number(q.availableSeats ?? 0);
+      const total = Number(q.totalSeats || 500);
+      return `<span class="stress-quota-chip">Konser #${Number(q.id)}: <strong>${avail}/${total}</strong></span>`;
+    })
+    .join('');
+}
+
+async function refreshLiveTestQuota() {
+  try {
+    const { res, data } = await fetchJsonWithTimeout('/api/concerts', { cache: 'no-store' }, 6000);
+    if (res.ok && Array.isArray(data) && data.length > 0) {
+      renderStressQuotaBadges(data);
+    }
+  } catch {}
+}
+
+function resetLiveTestUI(quotas = null) {
+  const avgEl = document.getElementById('stressAvgLatency');
+  const okEl = document.getElementById('stressOkCount');
+  const conflictEl = document.getElementById('stressConflictCount');
+  const errEl = document.getElementById('stressErrorRate');
+  const slaBadge = document.getElementById('stressSlaBadge');
+  const distWrap = document.getElementById('stressWorkerDist');
+
+  if (avgEl) avgEl.textContent = '0 ms';
+  if (okEl) okEl.textContent = '0';
+  if (conflictEl) conflictEl.textContent = '0';
+  if (errEl) errEl.textContent = '0%';
+  if (slaBadge) {
+    slaBadge.classList.add('is-pass');
+    slaBadge.classList.remove('is-fail');
+    slaBadge.textContent = 'Siap Diuji (Target SLA < 200ms)';
+  }
+  if (distWrap) {
+    distWrap.innerHTML =
+      '<div style="color: var(--color-text-muted); font-size: 14px;">Belum ada pengujian dijalankan. Klik <strong>Mulai War Test</strong> untuk melihat distribusi worker node secara langsung.</div>';
+  }
+  if (Array.isArray(quotas) && quotas.length > 0) {
+    renderStressQuotaBadges(quotas);
+  }
+}
+
+async function resetSystemStock(options = {}) {
+  const { skipConfirm = false, sourceBtn = null } = options || {};
   if (state.isResetting) return;
-  if (!confirm('Reset seluruh kuota tiket, Redis locks, dan database ke kondisi awal?')) return;
+  if (!skipConfirm && !confirm('Reset seluruh kuota tiket, Redis locks, dan database ke kondisi awal?')) return;
+
+  // Batalkan stress test yang masih berjalan agar tombol Mulai War Test & Reset Kuota tidak stuck
+  if (stressTestController) {
+    stressTestController.abort();
+    stressTestController = null;
+  }
+  state.isRunningStressTest = false;
+  const startBtn = document.getElementById('btnStartStressTest');
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.innerHTML = '<span>Mulai War Test</span>';
+  }
+
+  const resetBtn = sourceBtn || document.getElementById('btnResetStressTest');
+  const prevHtml = resetBtn ? resetBtn.innerHTML : '';
+  if (resetBtn) {
+    resetBtn.disabled = true;
+    resetBtn.innerHTML = '<span class="ui-spinner"></span><span>Mereset...</span>';
+  }
 
   state.isResetting = true;
   try {
@@ -1764,20 +2014,439 @@ async function resetSystemStock() {
     if (!res.ok || !data.success) {
       throw new Error(data.message || `Gagal mereset data (HTTP ${res.status}).`);
     }
-    showToast(data.message || 'Reset selesai.');
-    await fetchConcerts();
+
+    const fallbackQuotas = [1, 2, 3].map((id) => ({
+      id,
+      totalSeats: 500,
+      availableSeats: Number(data.concertStocks?.[id] ?? 500),
+    }));
+    resetLiveTestUI(Array.isArray(data.concertQuotas) && data.concertQuotas.length > 0 ? data.concertQuotas : fallbackQuotas);
+
+    state.concertsLoaded = false;
+    if (isConcertsPage()) {
+      await fetchConcerts({ force: true, render: true });
+    } else if (state.activePage === 'live-test' && (!data.concertQuotas || data.concertQuotas.length === 0)) {
+      await refreshLiveTestQuota();
+    }
     if (document.getElementById('warModal')?.classList.contains('active')) {
       await loadSeats(state.activeWarConcertId);
     }
+    showToast(data.message || 'Reset kuota & metrik simulasi selesai.');
   } catch (e) {
     showToast(`Gagal mereset: ${e.message}`, true);
   } finally {
     state.isResetting = false;
+    if (resetBtn) {
+      resetBtn.disabled = false;
+      resetBtn.innerHTML = prevHtml || '<span>Reset Kuota</span>';
+    }
   }
 }
 
 // ============================================================================
-// 11. SHARED OVERLAYS (MODALS, E-TICKET, MULTI-SELECT BAR, TOAST) & INIT
+// 11. RIWAYAT PEMESANAN (JWT) & LIVE STRESS TEST RUNNER
+// ============================================================================
+
+async function fetchMyOrders() {
+  const container = document.getElementById('ordersContent');
+  const subtitle = document.getElementById('ordersSubtitle');
+  if (!container) return;
+
+  if (!state.currentUser) {
+    if (subtitle) subtitle.textContent = 'Masuk akun untuk melihat daftar pesanan tiket Anda.';
+    container.innerHTML = `
+      <div class="catalog-loading-state">
+        <span>Anda belum masuk akun. Masuk sebagai <strong>ADMIN</strong> atau <strong>USER</strong> untuk melihat riwayat pemesanan.</span>
+        <button type="button" class="btn-pill-primary" onclick="openLoginModal()">
+          <span>Masuk Sekarang</span>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  if (subtitle) subtitle.textContent = `Riwayat pemesanan untuk ${state.currentUser.name} (${state.currentUser.email})`;
+  container.innerHTML = `
+    <div class="catalog-loading-state">
+      <span class="ui-spinner ui-spinner-lg"></span>
+      <span>Memuat riwayat pemesanan dari PostgreSQL...</span>
+    </div>
+  `;
+
+  if (ordersAbortController) ordersAbortController.abort();
+  ordersAbortController = new AbortController();
+
+  try {
+    const headers = {};
+    if (state.jwtToken) headers.Authorization = `Bearer ${state.jwtToken}`;
+
+    const { res, data } = await fetchJsonWithTimeout(
+      '/api/bookings/my-orders',
+      { headers, cache: 'no-store', signal: ordersAbortController.signal },
+      8000
+    );
+
+    if (res.status === 401) {
+      container.innerHTML = `
+        <div class="catalog-loading-state">
+          <span>Sesi JWT berakhir. Silakan masuk kembali untuk memuat riwayat pemesanan.</span>
+          <button type="button" class="btn-pill-primary" onclick="openLoginModal()"><span>Masuk Kembali</span></button>
+        </div>
+      `;
+      return;
+    }
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || `Gagal memuat riwayat (HTTP ${res.status}).`);
+    }
+
+    renderMyOrders(data.orders || []);
+  } catch (err) {
+    if (err.isExternalAbort) return;
+    container.innerHTML = `
+      <div class="catalog-loading-state" style="color: #9b2c2c;">
+        <span>${escapeHtml(err.message || 'Gagal memuat riwayat pemesanan.')}</span>
+        <button type="button" class="btn-retry-inline" onclick="fetchMyOrders()">Coba Muat Ulang</button>
+      </div>
+    `;
+  }
+}
+
+function renderMyOrders(orders) {
+  const container = document.getElementById('ordersContent');
+  if (!container) return;
+
+  if (!orders.length) {
+    container.innerHTML = `
+      <div class="catalog-loading-state">
+        <span>Belum ada tiket yang dipesan pada akun ini.</span>
+        <a href="#konser" class="btn-pill-primary" data-page="konser"><span>Cari Konser &amp; War Tiket</span></a>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="orders-table-wrap">
+      <table class="orders-table">
+        <thead>
+          <tr>
+            <th>Kode Booking</th>
+            <th>Konser</th>
+            <th>Kategori &amp; Kursi</th>
+            <th>Total Harga</th>
+            <th>Tanggal Pesan</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${orders
+            .map((o) => {
+              const st = String(o.status || 'PAID').toUpperCase();
+              const cls = st === 'PAID' ? 'is-paid' : st === 'PENDING' ? 'is-pending' : 'is-expired';
+              const dt = o.createdAt ? new Date(o.createdAt).toLocaleString('id-ID') : '-';
+              return `
+                <tr>
+                  <td><strong class="font-mono selectable-text">${escapeHtml(o.bookingCode)}</strong></td>
+                  <td>
+                    <div style="font-weight: 800; color: var(--color-text);">${escapeHtml(o.concertTitle)}</div>
+                    <div style="font-size: 12px; color: var(--color-text-muted);">${escapeHtml(o.concertVenue)}</div>
+                  </td>
+                  <td>
+                    <div>${escapeHtml(o.seatCategory)}</div>
+                    <strong class="font-mono" style="color: var(--color-forest);">${escapeHtml(o.seatNumber)}</strong>
+                  </td>
+                  <td><strong>Rp ${Number(o.totalAmount || 0).toLocaleString('id-ID')}</strong></td>
+                  <td style="font-size: 13px; color: var(--color-text-muted);">${escapeHtml(dt)}</td>
+                  <td><span class="status-pill ${cls}">${escapeHtml(st)}</span></td>
+                </tr>
+              `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderWorkerDistributionBars(distWrap, workerNodes, emptyMessage) {
+  if (!distWrap) return;
+  const entries = Object.entries(workerNodes || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    distWrap.innerHTML = `<div style="color: var(--color-text-muted); font-size: 14px;">${emptyMessage}</div>`;
+    return;
+  }
+  const totalHandled = entries.reduce((sum, [, cnt]) => sum + cnt, 0) || 1;
+  distWrap.innerHTML = entries
+    .map(([node, cnt]) => {
+      const pct = Math.round((cnt / totalHandled) * 100);
+      return `
+        <div class="worker-dist-row">
+          <strong class="font-mono selectable-text">${escapeHtml(node)}</strong>
+          <div class="worker-bar-track"><div class="worker-bar-fill" style="width: ${pct}%;"></div></div>
+          <span class="font-mono" style="text-align: right;">${cnt} req</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderStressTestMetrics(metrics) {
+  const avgEl = document.getElementById('stressAvgLatency');
+  const okEl = document.getElementById('stressOkCount');
+  const conflictEl = document.getElementById('stressConflictCount');
+  const errEl = document.getElementById('stressErrorRate');
+  const slaBadge = document.getElementById('stressSlaBadge');
+  const distWrap = document.getElementById('stressWorkerDist');
+
+  if (avgEl) avgEl.textContent = `${metrics.avgLatencyMs} ms`;
+  if (okEl) okEl.textContent = String(metrics.ok200);
+  if (conflictEl) conflictEl.textContent = String(metrics.conflict409);
+  if (errEl) errEl.textContent = `${metrics.errorRatePct}%`;
+
+  if (slaBadge) {
+    const pass = Boolean(metrics.slaPassed);
+    slaBadge.classList.toggle('is-pass', pass);
+    slaBadge.classList.toggle('is-fail', !pass);
+    slaBadge.textContent = pass
+      ? `SLA TERPENUHI (${metrics.avgLatencyMs} ms < 200ms, Err ${metrics.errorRatePct}%)`
+      : `MELEBIHI SLA (${metrics.avgLatencyMs} ms, Err ${metrics.errorRatePct}%)`;
+  }
+
+  renderWorkerDistributionBars(distWrap, metrics.workerNodes, 'Tidak ada node worker yang merespons.');
+}
+
+function recordWarTestResult({ concertId, count, metrics }) {
+  const selectEl = document.getElementById('stressConcertSelect');
+  const optText = selectEl?.options?.[selectEl.selectedIndex]?.text || `Konser #${concertId}`;
+  const entry = {
+    id: `RUN-${Date.now().toString(36).toUpperCase()}`,
+    timestamp: new Date().toISOString(),
+    concertId,
+    concertLabel: optText,
+    totalRequests: Number(metrics.totalRequests || count),
+    avgLatencyMs: Number(metrics.avgLatencyMs || 0),
+    p95LatencyMs: Number(metrics.p95LatencyMs ?? metrics.avgLatencyMs ?? 0),
+    ok200: Number(metrics.ok200 || 0),
+    conflict409: Number(metrics.conflict409 || 0),
+    error5xx: Number(metrics.error5xx || 0),
+    errorRatePct: Number(metrics.errorRatePct || 0),
+    slaPassed: Boolean(metrics.slaPassed),
+    workerNodes: metrics.workerNodes || {},
+  };
+
+  state.warTestHistory.unshift(entry);
+  if (state.warTestHistory.length > 20) state.warTestHistory.length = 20;
+  try {
+    sessionStorage.setItem('wartiket_war_test_history', JSON.stringify(state.warTestHistory));
+  } catch {}
+  renderHasilWarTestPage();
+}
+
+function renderHasilWarTestPage() {
+  const latest = state.warTestHistory[0] || null;
+  const subEl = document.getElementById('hasilSummarySubtitle');
+  const badgeEl = document.getElementById('hasilLatestSlaBadge');
+  const countEl = document.getElementById('hasilLatestCount');
+  const latEl = document.getElementById('hasilLatestLatency');
+  const outEl = document.getElementById('hasilLatestOutcomes');
+  const errNodesEl = document.getElementById('hasilLatestErrorNodes');
+  const distWrap = document.getElementById('hasilWorkerDist');
+  const histWrap = document.getElementById('warTestHistoryWrap');
+
+  if (!latest) {
+    if (subEl) subEl.textContent = 'Belum ada hasil simulasi. Jalankan pengujian dari menu Live Test.';
+    if (badgeEl) {
+      badgeEl.classList.add('is-pass');
+      badgeEl.classList.remove('is-fail');
+      badgeEl.textContent = 'Belum Ada Data';
+    }
+    if (countEl) countEl.textContent = '0 req';
+    if (latEl) latEl.textContent = '0 ms';
+    if (outEl) outEl.textContent = '0 / 0';
+    if (errNodesEl) errNodesEl.textContent = '0%';
+    renderWorkerDistributionBars(distWrap, {}, 'Belum ada hasil pengujian tersimpan.');
+    if (histWrap) {
+      histWrap.innerHTML =
+        '<div class="catalog-loading-state"><span>Belum ada riwayat pengujian. Buka menu <strong>Live Test</strong> lalu klik <strong>Mulai War Test</strong>.</span></div>';
+    }
+    return;
+  }
+
+  const nodeCount = Object.keys(latest.workerNodes || {}).length;
+  if (subEl) {
+    subEl.textContent = `Pengujian terakhir (${latest.concertLabel}) pada ${new Date(latest.timestamp).toLocaleString('id-ID')}.`;
+  }
+  if (badgeEl) {
+    badgeEl.classList.toggle('is-pass', latest.slaPassed);
+    badgeEl.classList.toggle('is-fail', !latest.slaPassed);
+    badgeEl.textContent = latest.slaPassed
+      ? `SLA TERPENUHI (${latest.avgLatencyMs} ms < 200ms)`
+      : `MELEBIHI SLA (${latest.avgLatencyMs} ms)`;
+  }
+  if (countEl) countEl.textContent = `${latest.totalRequests} req`;
+  if (latEl) latEl.textContent = `${latest.avgLatencyMs} / ${latest.p95LatencyMs} ms`;
+  if (outEl) outEl.textContent = `${latest.ok200} / ${latest.conflict409}`;
+  if (errNodesEl) errNodesEl.textContent = `${latest.errorRatePct}% (${nodeCount} node)`;
+  renderWorkerDistributionBars(distWrap, latest.workerNodes, 'Tidak ada node worker tercatat.');
+
+  if (histWrap) {
+    histWrap.innerHTML = `
+      <table class="orders-table">
+        <thead>
+          <tr>
+            <th>Waktu</th>
+            <th>Konser Target</th>
+            <th>Request</th>
+            <th>Avg / p95</th>
+            <th>OK / 409</th>
+            <th>Worker Node</th>
+            <th>Status SLA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.warTestHistory
+            .map((run) => {
+              const dt = run.timestamp ? new Date(run.timestamp).toLocaleString('id-ID') : '-';
+              const nodesSummary = Object.entries(run.workerNodes || {})
+                .map(([n, c]) => `${n} (${c})`)
+                .join(', ') || '-';
+              const pillCls = run.slaPassed ? 'is-paid' : 'is-expired';
+              const pillLabel = run.slaPassed ? 'PASS (<200ms)' : 'FAIL (>=200ms)';
+              return `
+                <tr>
+                  <td style="font-size: 13px; color: var(--color-text-muted);">${escapeHtml(dt)}</td>
+                  <td><strong>${escapeHtml(run.concertLabel)}</strong></td>
+                  <td class="font-mono">${run.totalRequests}</td>
+                  <td class="font-mono">${run.avgLatencyMs} / ${run.p95LatencyMs} ms</td>
+                  <td class="font-mono">${run.ok200} / ${run.conflict409}</td>
+                  <td class="font-mono" style="font-size: 12px;">${escapeHtml(nodesSummary)}</td>
+                  <td><span class="status-pill ${pillCls}">${pillLabel}</span></td>
+                </tr>
+              `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+function clearWarTestHistory() {
+  state.warTestHistory = [];
+  try {
+    sessionStorage.removeItem('wartiket_war_test_history');
+  } catch {}
+  renderHasilWarTestPage();
+  showToast('Riwayat Hasil War Test dibersihkan.');
+}
+
+async function runLiveStressTest() {
+  if (state.isRunningStressTest) return;
+
+  const count = parseInt(document.getElementById('stressCountSelect')?.value || '100', 10);
+  const concertId = parseInt(document.getElementById('stressConcertSelect')?.value || '1', 10);
+  const btn = document.getElementById('btnStartStressTest');
+
+  state.isRunningStressTest = true;
+  if (stressTestController) stressTestController.abort();
+  stressTestController = new AbortController();
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="ui-spinner ui-spinner-light"></span><span>Mengirim ${count} Request...</span>`;
+  }
+
+  try {
+    if (count <= 10) {
+      // Browser direct concurrency burst for small counts (<= 10)
+      const tasks = Array.from({ length: count }, async (_, idx) => {
+        const t0 = performance.now();
+        try {
+          const res = await fetch('/api/tickets/buy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: idx + 6, concertId }),
+            signal: stressTestController.signal,
+          });
+          const body = await res.json().catch(() => ({}));
+          return { status: res.status, ms: performance.now() - t0, servedBy: body.servedBy || 'unknown' };
+        } catch (err) {
+          if (err.name === 'AbortError') throw err;
+          return { status: 0, ms: performance.now() - t0, servedBy: 'error' };
+        }
+      });
+
+      const items = await Promise.all(tasks);
+      const sortedMs = items.map((r) => r.ms).sort((a, b) => a - b);
+      const avg = sortedMs.reduce((s, v) => s + v, 0) / sortedMs.length;
+      const p95 = sortedMs[Math.min(sortedMs.length - 1, Math.floor(sortedMs.length * 0.95))];
+      const ok200 = items.filter((r) => r.status === 200).length;
+      const conflict409 = items.filter((r) => r.status === 409).length;
+      const error5xx = items.length - ok200 - conflict409;
+      const errorRatePct = Number(((error5xx / items.length) * 100).toFixed(2));
+      const workerNodes = {};
+      for (const r of items) {
+        if (r.servedBy && r.servedBy !== 'error') {
+          workerNodes[r.servedBy] = (workerNodes[r.servedBy] || 0) + 1;
+        }
+      }
+      const metricsPayload = {
+        totalRequests: count,
+        avgLatencyMs: Number(avg.toFixed(1)),
+        p95LatencyMs: Number(p95.toFixed(1)),
+        ok200,
+        conflict409,
+        error5xx,
+        errorRatePct,
+        slaPassed: avg < 200 && errorRatePct < 1,
+        workerNodes,
+      };
+      renderStressTestMetrics(metricsPayload);
+      recordWarTestResult({ concertId, count, metrics: metricsPayload });
+      await refreshLiveTestQuota();
+    } else {
+      // In-cluster Nginx burst for 100-1000 requests (bypasses browser 6-socket cap)
+      const burstTimeoutMs = Math.max(30000, count * 90);
+      const { res, data } = await fetchJsonWithTimeout(
+        '/api/stress-test/run',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count, concertId, userId: state.currentUser?.id || 1 }),
+          signal: stressTestController.signal,
+        },
+        burstTimeoutMs
+      );
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || `Gagal menjalankan stress test (HTTP ${res.status}).`);
+      }
+      renderStressTestMetrics(data);
+      recordWarTestResult({ concertId, count, metrics: data });
+      if (Array.isArray(data.concertQuotas) && data.concertQuotas.length > 0) {
+        renderStressQuotaBadges(data.concertQuotas);
+      } else {
+        await refreshLiveTestQuota();
+      }
+    }
+
+    state.concertsLoaded = false;
+    showToast(`Simulasi ${count} concurrent requests selesai!`);
+  } catch (err) {
+    if (err.isExternalAbort || err.name === 'AbortError') return;
+    showToast(`Gagal menjalankan stress test: ${err.message}`, true);
+  } finally {
+    state.isRunningStressTest = false;
+    stressTestController = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>Mulai War Test</span>';
+    }
+  }
+}
+
+// ============================================================================
+// 12. SHARED OVERLAYS (MODALS, E-TICKET, MULTI-SELECT BAR, TOAST) & INIT
 // ============================================================================
 
 function ensureSharedModals() {
@@ -1816,21 +2485,13 @@ function ensureSharedModals() {
         <div class="demo-accounts-box">
           <span class="demo-accounts-title">Pilih Akun Demo (1-Klik):</span>
           <div class="demo-accounts-grid">
-            <button type="button" class="demo-account-btn" onclick="autoFill('dosen@wartiket.id', 'password123')">
-              <div class="demo-account-name">Dosen Penguji</div>
-              <div class="demo-account-email">dosen@wartiket.id</div>
+            <button type="button" class="demo-account-btn" onclick="autoFill('admin@wartiket.id', 'password123')">
+              <div class="demo-account-name">ADMIN</div>
+              <div class="demo-account-email">admin@wartiket.id</div>
             </button>
-            <button type="button" class="demo-account-btn" onclick="autoFill('mahasiswa1@wartiket.id', 'password123')">
-              <div class="demo-account-name">Cloud Lead</div>
-              <div class="demo-account-email">mahasiswa1@...</div>
-            </button>
-            <button type="button" class="demo-account-btn" onclick="autoFill('vip.buyer@gmail.com', 'password123')">
-              <div class="demo-account-name">VIP Buyer</div>
-              <div class="demo-account-email">vip.buyer@...</div>
-            </button>
-            <button type="button" class="demo-account-btn" onclick="autoFill('festival.fan@gmail.com', 'password123')">
-              <div class="demo-account-name">Festival Fan</div>
-              <div class="demo-account-email">festival.fan@...</div>
+            <button type="button" class="demo-account-btn" onclick="autoFill('user@wartiket.id', 'password123')">
+              <div class="demo-account-name">USER</div>
+              <div class="demo-account-email">user@wartiket.id</div>
             </button>
           </div>
         </div>
@@ -1838,7 +2499,7 @@ function ensureSharedModals() {
         <form class="modal-form" onsubmit="handleLogin(event)">
           <div>
             <label class="form-label" for="modalLoginEmail">Alamat Email</label>
-            <input type="email" id="modalLoginEmail" class="form-pill-input" required value="dosen@wartiket.id">
+            <input type="email" id="modalLoginEmail" class="form-pill-input" required value="admin@wartiket.id">
           </div>
 
           <div>
@@ -2038,7 +2699,6 @@ function ensureSharedModals() {
 function initGlobalOverlayHandlers() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      closeNavSearchPanel();
       closeNavAccountDropdown();
       closeLoginModal();
       closeWarModal();
@@ -2062,7 +2722,6 @@ function initGlobalOverlayHandlers() {
       closeAllAutocompletes();
     }
     if (!e.target.closest('#navbar')) {
-      closeNavSearchPanel();
       closeNavAccountDropdown();
     }
   });
@@ -2095,16 +2754,24 @@ async function syncSharedSession() {
 
 window.addEventListener('DOMContentLoaded', () => {
   ensureSharedModals();
-  fit();
-  syncActiveNavByRoute();
+  initSpaNavigation();
   updateAuthUI();
   syncSharedSession();
-  renderMultiSelectBar();
   pollHealth();
   setInterval(pollHealth, 5000);
 
-  fetchConcerts();
   initCarouselInteractions();
+  populateFilterDropdowns();
   attachAutocomplete('searchInput', 'searchAutocomplete');
   initGlobalOverlayHandlers();
+
+  const initialPage = resolvePageFromLocation();
+  switchPage(initialPage, {
+    updateHash: Boolean(window.location.hash),
+    scrollToTop: false,
+  });
+
+  requestAnimationFrame(() => {
+    document.documentElement.classList.remove('wt-booting');
+  });
 });

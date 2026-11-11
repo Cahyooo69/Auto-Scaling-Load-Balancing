@@ -32,6 +32,12 @@ ON CONFLICT (email) DO NOTHING;
 -- Reset sequence users_id_seq agar auto-increment ID aman
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
+INSERT INTO users (name, email, password, phone, id_card, role)
+VALUES
+    ('Admin WarTiket', 'admin@wartiket.id', 'password123', '081100000001', '3171000000000001', 'admin'),
+    ('User Penonton', 'user@wartiket.id', 'password123', '081100000002', '3171000000000002', 'user')
+ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role;
+
 -- ============================================================================
 -- 2. SEED CONCERTS (Minimal 3 Jadwal Konser)
 -- ============================================================================

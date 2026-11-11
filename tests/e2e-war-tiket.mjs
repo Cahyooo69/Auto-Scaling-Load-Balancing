@@ -137,16 +137,20 @@ async function main() {
     });
 
     // -----------------------------------------------------------------------
-    // SKENARIO 1: Multi-POV Demo Account Authentication (4 POVs)
+    // SKENARIO 1: Multi-POV Demo Account Authentication (2 POVs: ADMIN & USER) + Hero BG
     // -----------------------------------------------------------------------
-    console.log('[Skenario 1] Testing 4 POV demo logins on / ...');
+    console.log('[Skenario 1] Testing 2 POV demo logins (ADMIN & USER) and Beranda hero background on / ...');
     await cdp.goto(`${BASE_URL}/`);
 
+    const heroBgCheck = await cdp.eval(`getComputedStyle(document.querySelector('#page-beranda .hero-card')).backgroundImage`);
+    assert.ok(heroBgCheck.includes('/img/hero-bg.jpg'), `Hero background must use /img/hero-bg.jpg, got "${heroBgCheck}"`);
+
+    const povButtons = await cdp.eval(`[...document.querySelectorAll('.demo-account-btn .demo-account-name')].map(el => el.textContent.trim())`);
+    assert.deepEqual(povButtons, ['ADMIN', 'USER'], `Expected exactly 2 POV demo buttons (ADMIN, USER), got ${JSON.stringify(povButtons)}`);
+
     const povCases = [
-      { email: 'dosen@wartiket.id', expectedSnippet: 'Budi' },
-      { email: 'mahasiswa1@wartiket.id', expectedSnippet: 'Cloud' },
-      { email: 'vip.buyer@gmail.com', expectedSnippet: 'Siti' },
-      { email: 'festival.fan@gmail.com', expectedSnippet: 'Andi' },
+      { email: 'admin@wartiket.id', expectedSnippet: 'Admin' },
+      { email: 'user@wartiket.id', expectedSnippet: 'User' },
     ];
 
     for (const pov of povCases) {
@@ -169,73 +173,111 @@ async function main() {
         `Expected full name for ${pov.email} to include "${pov.expectedSnippet}", got "${userFullName}"`
       );
     }
-    // Leave logged in as Dosen Penguji (long academic title) for Scenario 3 & 4 print check
+    // Leave logged in as USER for Scenario 3 & 4 war checkout + print check
     await cdp.eval(`(() => {
       handleLogout();
       document.getElementById('navBtnAuth').click();
-      autoFill('dosen@wartiket.id', 'password123');
+      autoFill('user@wartiket.id', 'password123');
       document.getElementById('btnLoginSubmit').click();
     })()`);
-    await cdp.waitFor(`() => state?.currentUser?.email === 'dosen@wartiket.id'`);
-    console.log('  OK: All 4 POV demo logins verified & left signed in as Dosen Penguji.');
+    await cdp.waitFor(`() => state?.currentUser?.email === 'user@wartiket.id'`);
+    console.log('  OK: 2 POV demo logins (ADMIN & USER) & /img/hero-bg.jpg verified.');
 
     // -----------------------------------------------------------------------
-    // SKENARIO 2: Multi-Page Navigation, Zero Dead Links ('Cara War' Removed), Scroll-Locked Navbar
+    // SKENARIO 2: SPA Routes, Top-of-Page Stationary Navbar (No Float), Single Hero Search & Footer
     // -----------------------------------------------------------------------
-    console.log('[Skenario 2] Testing multi-page routes, zero dead links, navbar scroll lock, and 3-column footer...');
+    console.log('[Skenario 2] Testing routes, top-stationary relative navbar, zero dead links, single hero search, and 3-column footer...');
     const routes = [
-      { path: '/', expectSearch: true },
-      { path: '/konser', expectSearch: true },
-      { path: '/kontak', expectSearch: false },
+      { path: '/', expectHeroSearch: true },
+      { path: '/konser', expectHeroSearch: false },
+      { path: '/riwayat', expectHeroSearch: false },
+      { path: '/kontak', expectHeroSearch: false },
+      { path: '/live-test', expectHeroSearch: false },
+      { path: '/hasil-test', expectHeroSearch: false },
     ];
 
+    let baselineNavXs = null;
     for (const r of routes) {
       await cdp.goto(`${BASE_URL}${r.path}`);
       const audit = await cdp.eval(`(() => {
         const nav = document.querySelector('.navbar');
-        const navRect0 = nav ? nav.getBoundingClientRect() : { top: -999, bottom: -999 };
-        const heroEl = document.querySelector('.hero-card, .page-hero-band');
-        const heroTop0 = heroEl ? heroEl.getBoundingClientRect().top : 999;
+        const navStyle = nav ? getComputedStyle(nav) : null;
+        const navRect0 = nav ? nav.getBoundingClientRect() : { top: -999, bottom: -999, width: 0 };
+        const heroEl = document.querySelector('.spa-page.is-active .hero-card, .spa-page.is-active .page-hero-band');
+        const heroRect = heroEl ? heroEl.getBoundingClientRect() : { top: 999, bottom: 999 };
+        const heroSearchEl = document.querySelector('#page-beranda .hero-search-form');
+        const heroSearchRect = heroSearchEl ? heroSearchEl.getBoundingClientRect() : { top: 0, width: 0, height: 0 };
         window.scrollTo(0, 600);
         const scrollYAfter = window.scrollY;
         const navRectAfter = nav ? nav.getBoundingClientRect() : { top: -999, bottom: -999 };
         window.scrollTo(0, 0);
         const navLabels = [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => el.textContent.trim());
+        const navXs = [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => Math.round(el.getBoundingClientRect().left));
         const footerNavLabels = [...document.querySelectorAll('.site-footer .footer-links a')].map((el) => el.textContent.trim());
         const deadCaraWarLinks = [...document.querySelectorAll('a[href*="cara-war"], a[href*="guide.html"]')].length;
-        const searchBtn = document.getElementById('btnToggleSearchPanel');
+        const legacyNavSearchCount = document.querySelectorAll('#btnToggleSearchPanel, #navSearchPanel').length;
+        const hasVisibleHeroSearch = Boolean(
+          heroSearchEl &&
+            heroSearchRect.height > 20 &&
+            heroSearchRect.top >= heroRect.bottom - 1 &&
+            document.getElementById('searchInput') &&
+            document.getElementById('cityFilter') &&
+            document.getElementById('dateFilter')
+        );
+        const clsEntries = performance.getEntriesByType('layout-shift') || [];
+        const totalCls = clsEntries.reduce((s, e) => (!e.hadRecentInput ? s + e.value : s), 0);
         const footerCols = document.querySelector('.site-footer .footer-inner')
           ? getComputedStyle(document.querySelector('.site-footer .footer-inner')).gridTemplateColumns.split(' ').length
           : 0;
         return {
           navLabels,
+          navXs,
           footerNavLabels,
           deadCaraWarLinks,
-          navPosition: nav ? getComputedStyle(nav).position : '',
-          navBefore: navRect0.top,
-          heroBelowNav: heroTop0 >= navRect0.bottom - 1,
+          legacyNavSearchCount,
+          hasVisibleHeroSearch,
+          totalCls,
+          navPosition: navStyle ? navStyle.position : '',
+          navHeight: navStyle ? parseFloat(navStyle.height) : 0,
+          navTop: Math.round(navRect0.top),
+          navWidth: Math.round(navRect0.width),
+          heroBelowNav: heroRect.top >= navRect0.bottom - 1,
           scrollYAfter,
-          navStaysAtTopOfPage: navRectAfter.bottom <= 0,
-          hasSearch: Boolean(searchBtn),
+          navLeftViewportOnScroll: navRectAfter.bottom <= 20,
           footerCols,
           statusText: document.getElementById('footerClusterStatus')?.textContent?.trim() || '',
           hasResetBtn: Boolean(document.querySelector('.btn-footer-reset')),
         };
       })()`);
 
-      assert.deepEqual(audit.navLabels, ['Beranda', 'Konser', 'Kontak'], `Unexpected header nav items on ${r.path}`);
-      assert.deepEqual(audit.footerNavLabels, ['Beranda', 'Daftar Konser', 'Kontak & Bantuan'], `Unexpected footer nav items on ${r.path}`);
+      assert.deepEqual(
+        audit.navLabels,
+        ['Beranda', 'Konser', 'Riwayat Pemesanan', 'Kontak', 'Live Test', 'Hasil War Test'],
+        `Unexpected header nav items on ${r.path}`
+      );
+      if (!baselineNavXs) baselineNavXs = audit.navXs;
+      assert.deepEqual(audit.navXs, baselineNavXs, `Navbar X-coordinates shifted on ${r.path}: ${JSON.stringify(audit.navXs)} vs ${JSON.stringify(baselineNavXs)}`);
+      assert.deepEqual(
+        audit.footerNavLabels,
+        ['Beranda', 'Daftar Konser', 'Riwayat Pemesanan', 'Kontak & Bantuan', 'Live Stress Test', 'Hasil War Test'],
+        `Unexpected footer nav items on ${r.path}`
+      );
       assert.equal(audit.deadCaraWarLinks, 0, `Dead Cara War links must not exist on ${r.path}`);
-      assert.equal(audit.hasSearch, r.expectSearch, `Search icon presence mismatch on ${r.path}`);
-      assert.equal(audit.navPosition, 'relative', `Navbar must stay stationary inside #stage on ${r.path}`);
-      assert.ok(audit.navBefore >= 0 && audit.navBefore <= 40, `Navbar initial top out of bounds on ${r.path}: ${audit.navBefore}`);
+      assert.equal(audit.legacyNavSearchCount, 0, `Floating navbar search icon/overlay must be removed on ${r.path}`);
+      assert.equal(audit.hasVisibleHeroSearch, r.expectHeroSearch, `Single search form below hero banner mismatch on ${r.path}`);
+      assert.ok(audit.totalCls <= 0.05, `Unexpected CLS bounce on ${r.path}: ${audit.totalCls}`);
+      assert.equal(audit.navPosition, 'relative', `Navbar must remain relative at top of document (not follow scroll) on ${r.path}, got ${audit.navPosition}`);
+      assert.equal(audit.navHeight, 116, `Navbar explicit height must be 116px on ${r.path}, got ${audit.navHeight}`);
+      assert.equal(audit.navTop, 0, `Navbar must start at top: 0 on ${r.path}, got ${audit.navTop}`);
+      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px stage on ${r.path}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
-        assert.ok(audit.navStaysAtTopOfPage, `Navbar must NOT follow scroll down on ${r.path}`);
+        assert.ok(audit.navLeftViewportOnScroll, `Navbar must stay at top of page and NOT follow scroll down on ${r.path}`);
       }
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
     }
+    await cdp.goto(`${BASE_URL}/kontak`);
     const contactCardCheck = await cdp.eval(`(() => {
       const cards = [...document.querySelectorAll('.contact-card')].map((el) => {
         const r = el.getBoundingClientRect();
@@ -252,6 +294,75 @@ async function main() {
     const removedRouteRes = await fetch(`${BASE_URL}/cara-war`);
     assert.equal(removedRouteRes.status, 404, 'Removed /cara-war route must return HTTP 404 cleanly');
     console.log('  OK: Multi-page routing, zero dead links, removed /cara-war (404), fixed navbar, and 3-col footer passed.');
+
+    // -----------------------------------------------------------------------
+    // SKENARIO 2b: SPA Hash Navigation (#beranda <-> #konser <-> #kontak) & Timer Cleanup
+    // -----------------------------------------------------------------------
+    console.log('[Skenario 2b] Testing instant Hash SPA routing, exclusive active navbar, lazy concert fetch & timer cleanup...');
+    await cdp.goto(`${BASE_URL}/#beranda`);
+    const spaAudit = await cdp.eval(`(async () => {
+      window.__spaAlive = true;
+      let concertFetchCalls = 0;
+      const origFetch = window.fetch.bind(window);
+      window.fetch = async (url, opts) => {
+        if (String(url).includes('/api/concerts') && !String(url).includes('/seats')) {
+          concertFetchCalls += 1;
+        }
+        return origFetch(url, opts);
+      };
+
+      try {
+        const snapshot = () => ({
+          alive: window.__spaAlive === true,
+          hash: window.location.hash,
+          activeNavs: [...document.querySelectorAll('.nav-link.active')].map((el) => el.dataset.page),
+          visiblePages: [...document.querySelectorAll('.spa-page')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.dataset.pageSection),
+          concertFetchCalls,
+        });
+
+        const s0 = snapshot();
+        document.querySelector('.nav-link[data-page="konser"]').click();
+        await new Promise((r) => setTimeout(r, 250));
+        const s1 = snapshot();
+
+        // Simulate active booking queue timer before switching away to Kontak
+        queuePollTimer = setTimeout(() => {}, 60000);
+        document.querySelector('.nav-link[data-page="kontak"]').click();
+        await new Promise((r) => setTimeout(r, 100));
+        const timerCleared = queuePollTimer === null;
+        const s2 = snapshot();
+
+        document.querySelector('.nav-link[data-page="beranda"]').click();
+        await new Promise((r) => setTimeout(r, 100));
+        const s3 = snapshot();
+
+        return { s0, s1, s2, s3, timerCleared };
+      } finally {
+        window.fetch = origFetch;
+      }
+    })()`);
+
+    assert.equal(spaAudit.s0.concertFetchCalls, 0, 'Beranda boot must NOT eagerly fetch /api/concerts');
+    assert.deepEqual(spaAudit.s0.activeNavs, ['beranda']);
+    assert.deepEqual(spaAudit.s0.visiblePages, ['beranda']);
+
+    assert.equal(spaAudit.s1.alive, true, 'Switching to Konser must NOT reload page');
+    assert.equal(spaAudit.s1.hash, '#konser');
+    assert.deepEqual(spaAudit.s1.activeNavs, ['konser']);
+    assert.deepEqual(spaAudit.s1.visiblePages, ['konser']);
+    assert.equal(spaAudit.s1.concertFetchCalls, 1, 'Entering Konser must fetch /api/concerts exactly once');
+
+    assert.equal(spaAudit.s2.alive, true, 'Switching to Kontak must NOT reload page');
+    assert.equal(spaAudit.s2.hash, '#kontak');
+    assert.deepEqual(spaAudit.s2.activeNavs, ['kontak']);
+    assert.deepEqual(spaAudit.s2.visiblePages, ['kontak']);
+    assert.equal(spaAudit.timerCleared, true, 'Ticket booking timer must be stopped on switchPage');
+
+    assert.equal(spaAudit.s3.alive, true);
+    assert.equal(spaAudit.s3.hash, '#beranda');
+    assert.deepEqual(spaAudit.s3.activeNavs, ['beranda']);
+    assert.deepEqual(spaAudit.s3.visiblePages, ['beranda']);
+    console.log('  OK: Hash SPA routing (#beranda/#konser/#kontak), lazy concert fetch & timer cleanup passed.');
 
     // -----------------------------------------------------------------------
     // SKENARIO 3 & 4: War E-05 -> E-Ticket + Print/PDF + Conflict + Anti-Stuck
@@ -279,7 +390,7 @@ async function main() {
     await cdp.waitFor(`() => document.getElementById('phaseDataDiri')?.style.display !== 'none'`);
 
     const buyerPrefill = await cdp.eval(`document.getElementById('buyerFullName')?.value`);
-    assert.ok(buyerPrefill.includes('Dr. Ir. Budi Santoso'), `Buyer name prefill mismatch: "${buyerPrefill}"`);
+    assert.ok(buyerPrefill.includes('User Penonton'), `Buyer name prefill mismatch: "${buyerPrefill}"`);
 
     await cdp.eval(`document.getElementById('btnBayarSekarang').click()`);
     await cdp.waitFor(`() => document.getElementById('phaseETicket')?.style.display === 'block'`, 10000);
@@ -290,7 +401,7 @@ async function main() {
       orderId: document.getElementById('ticketCode')?.textContent?.trim(),
     })`);
     assert.equal(ticketInfo.seat, 'E-05', 'E-Ticket must display seat E-05');
-    assert.ok(ticketInfo.buyer.includes('Dr. Ir. Budi Santoso, M.Kom'), 'E-Ticket must show full buyer title');
+    assert.ok(ticketInfo.buyer.includes('User Penonton'), 'E-Ticket must show buyer name');
     assert.ok(ticketInfo.orderId && ticketInfo.orderId !== '-' && ticketInfo.orderId !== 'TRX-XXXX', 'E-Ticket must contain Order ID');
 
     // Skenario 4: Emulate Print Media & Verify 1-page clean PDF without worker box/buttons
@@ -324,14 +435,82 @@ async function main() {
     assert.equal(pdfPageCount, 1, `Print PDF must fit cleanly on 1 page, got ${pdfPageCount}`);
     await cdp.send('Emulation.setEmulatedMedia', { media: 'screen' });
 
-    // Verify Seat E-05 is now marked Booked on fresh modal open
+    // -----------------------------------------------------------------------
+    // SKENARIO 4b: Riwayat Pemesanan (JWT My Orders) & Live Stress Test UI
+    // -----------------------------------------------------------------------
+    console.log('[Skenario 4b] Verifying JWT Order History (#riwayat) & Live Stress Test Panel (#live-test)...');
+    await cdp.eval(`document.querySelector('.nav-link[data-page="riwayat"]').click()`);
+    await cdp.waitFor(`() => document.querySelectorAll('#ordersContent .orders-table tbody tr').length > 0`, 8000);
+    const orderRowText = await cdp.eval(`document.querySelector('#ordersContent .orders-table tbody tr')?.textContent || ''`);
+    assert.ok(orderRowText.includes('E-05') && orderRowText.includes('PAID'), `Order history must display booked E-05 PAID order, got "${orderRowText}"`);
+
+    await cdp.eval(`document.querySelector('.nav-link[data-page="live-test"]').click()`);
+    await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);
+    await cdp.waitFor(`() => (document.getElementById('stressQuotaBadges')?.textContent || '').includes('/500')`, 8000);
+    await cdp.eval(`(() => {
+      document.getElementById('stressCountSelect').value = '10';
+      document.getElementById('btnStartStressTest').click();
+    })()`);
+    await cdp.waitFor(`() => Number(document.getElementById('stressOkCount')?.textContent || 0) >= 1 && document.querySelectorAll('#stressWorkerDist .worker-dist-row').length >= 1`, 10000);
+    const stressOut = await cdp.eval(`({
+      avg: document.getElementById('stressAvgLatency')?.textContent,
+      ok: document.getElementById('stressOkCount')?.textContent,
+      err: document.getElementById('stressErrorRate')?.textContent,
+      sla: document.getElementById('stressSlaBadge')?.textContent,
+      workers: document.querySelectorAll('#stressWorkerDist .worker-dist-row').length,
+      quotaBeforeReset: document.getElementById('stressQuotaBadges')?.textContent || '',
+    })`);
+    assert.equal(stressOut.err, '0%', `Live 10-req stress test must have 0% error rate, got ${JSON.stringify(stressOut)}`);
+    assert.ok(stressOut.workers >= 1, 'Live stress test must display responding Swarm container workers');
+    assert.ok(!stressOut.quotaBeforeReset.includes('496/500'), `Quota must decrease after war test + E-05 checkout, got ${stressOut.quotaBeforeReset}`);
+
+    // Verify new "Hasil War Test" menu displays latest summary + execution history row + worker distribution
+    await cdp.eval(`document.querySelector('.nav-link[data-page="hasil-test"]').click()`);
+    await cdp.waitFor(`() => document.getElementById('page-hasil-test')?.classList.contains('is-active') && document.querySelectorAll('#warTestHistoryWrap table tbody tr').length >= 1`, 8000);
+    const hasilAudit = await cdp.eval(`({
+      countText: document.getElementById('hasilLatestCount')?.textContent || '',
+      rows: document.querySelectorAll('#warTestHistoryWrap table tbody tr').length,
+      workers: document.querySelectorAll('#hasilWorkerDist .worker-dist-row').length,
+      rowText: document.querySelector('#warTestHistoryWrap table tbody tr')?.textContent || '',
+    })`);
+    assert.equal(hasilAudit.countText, '10 req', `Hasil War Test latest count mismatch: ${JSON.stringify(hasilAudit)}`);
+    assert.ok(hasilAudit.rows >= 1 && hasilAudit.workers >= 1, `Hasil War Test table/workers missing: ${JSON.stringify(hasilAudit)}`);
+
+    // Switch back to Live Test & verify Reset Kuota restores quota + zeroes live metrics cleanly
+    await cdp.eval(`document.querySelector('.nav-link[data-page="live-test"]').click()`);
+    await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);
+    await cdp.eval(`document.getElementById('btnResetStressTest').click()`);
+    await cdp.waitFor(`() => document.getElementById('stressOkCount')?.textContent === '0' && document.querySelectorAll('#stressWorkerDist .worker-dist-row').length === 0 && (document.getElementById('stressQuotaBadges')?.textContent || '').includes('496/500')`, 10000);
+    const afterReset = await cdp.eval(`({
+      avg: document.getElementById('stressAvgLatency')?.textContent,
+      ok: document.getElementById('stressOkCount')?.textContent,
+      conflict: document.getElementById('stressConflictCount')?.textContent,
+      err: document.getElementById('stressErrorRate')?.textContent,
+      sla: document.getElementById('stressSlaBadge')?.textContent,
+      workers: document.querySelectorAll('#stressWorkerDist .worker-dist-row').length,
+      quota: document.getElementById('stressQuotaBadges')?.textContent || '',
+      startBtnDisabled: document.getElementById('btnStartStressTest')?.disabled,
+      resetBtnDisabled: document.getElementById('btnResetStressTest')?.disabled,
+    })`);
+    assert.equal(afterReset.avg, '0 ms');
+    assert.equal(afterReset.ok, '0');
+    assert.equal(afterReset.conflict, '0');
+    assert.equal(afterReset.err, '0%');
+    assert.equal(afterReset.workers, 0);
+    assert.ok(afterReset.sla.includes('Siap Diuji'));
+    assert.ok(afterReset.quota.includes('496/500'));
+    assert.equal(afterReset.startBtnDisabled, false);
+    assert.equal(afterReset.resetBtnDisabled, false);
+    console.log('  OK: JWT Order History (#riwayat) & Live Stress Test + Reset Kuota (#live-test) verified.');
+
+    // Re-run a quick E-05 purchase for seat modal & booking checks below, or re-open war modal on concert 1
     await cdp.eval(`(() => { closeWarModal(); openWarModal(1); })()`);
     await cdp.waitFor(`() => Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).some(b => b.textContent.trim() === 'E-05')`);
-    const seatDisabledAfterWar = await cdp.eval(`(() => {
+    const seatE05AvailableAfterReset = await cdp.eval(`(() => {
       const btn = Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).find(b => b.textContent.trim() === 'E-05');
-      return Boolean(btn && btn.disabled && btn.classList.contains('booked'));
+      return Boolean(btn && !btn.disabled && btn.classList.contains('available'));
     })()`);
-    assert.ok(seatDisabledAfterWar, 'Seat E-05 must immediately show disabled booked status after war');
+    assert.ok(seatE05AvailableAfterReset, 'Seat E-05 must immediately become Available again after Reset Kuota');
 
     // -----------------------------------------------------------------------
     // SKENARIO 3b: Anti-Stuck Verification (Simulated HTTP 504 & Fetch Hang)

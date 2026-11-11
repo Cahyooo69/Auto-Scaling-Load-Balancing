@@ -5,7 +5,7 @@ Fitur: Pengujian End-to-End, Stabilitas Anti-Stuck, dan Konkurensi Sistem War Ti
     Dengan cluster Docker Swarm ("wartiket_app", "wartiket_nginx", "wartiket_redis", "wartiket_db") berjalan di "http://localhost"
     Dan kuota demo telah direset ke kondisi awal melalui "POST /api/tickets/reset"
 
-  Skenario Outline: [Skenario 1] Autentikasi Multi-POV Demo Account (4 POV)
+  Skenario Outline: [Skenario 1] Autentikasi Multi-POV Demo Account (2 POV)
     Dengan pengguna berada di halaman Beranda "/"
     Ketika pengguna menekan tombol "#navBtnAuth" ("Masuk") pada top navbar
     Dan pengguna memilih tombol demo akun "<label_pov>" untuk mengisi email "<email>"
@@ -15,20 +15,18 @@ Fitur: Pengujian End-to-End, Stabilitas Anti-Stuck, dan Konkurensi Sistem War Ti
     Dan "#navBtnAuth" tidak macet dalam status loading
 
     Contoh:
-      | label_pov     | email                   | nama_lengkap                |
-      | Dosen Penguji | dosen@wartiket.id       | Dr. Ir. Budi Santoso, M.Kom |
-      | Cloud Lead    | mahasiswa1@wartiket.id  | Kelompok 1 Cloud Lead       |
-      | VIP Buyer     | vip.buyer@gmail.com     | Siti Rahmawati (VIP Buyer)  |
-      | Festival Fan  | festival.fan@gmail.com  | Andi Pratama (Festival Goer)|
+      | label_pov | email             | nama_lengkap   |
+      | ADMIN     | admin@wartiket.id | Admin WarTiket |
+      | USER      | user@wartiket.id  | User Penonton  |
 
-  Skenario: [Skenario 2] Navigasi Multi-Page, Top Navbar Fixed-Top, dan Footer 3 Kolom
+  Skenario: [Skenario 2] Navigasi SPA Anti-Jitter, Top Navbar Sticky/Fixed, dan Footer 3 Kolom
     Dengan pengguna membuka "/"
     Ketika pengguna memverifikasi top navbar ".navbar"
     Maka ikon pencarian "#btnToggleSearchPanel" terlihat di sebelah tombol "Masuk" pada "/" dan "/konser"
-    Tetapi ikon pencarian "#btnToggleSearchPanel" tidak dirender pada "/kontak"
+    Tetapi ikon pencarian "#btnToggleSearchPanel" tersembunyi pada "/riwayat", "/kontak", dan "/live-test"
     Dan tidak ada tautan "/cara-war" atau "/guide.html" pada halaman mana pun serta akses "/cara-war" mengembalikan HTTP 404
     Ketika pengguna menggulir halaman sejauh 600px ke bawah
-    Maka posisi ".navbar" ("position: relative" di dalam "#stage") tetap berada di puncak dokumen dan tidak ikut turun menutupi konten saat di-scroll
+    Maka posisi ".navbar" ("position: sticky; top: 0; z-index: 1000") tetap terkunci stabil di puncak viewport dan koordinat X menu tidak bergeser antar halaman
     Dan footer ".site-footer .footer-inner" tersusun dalam 3 kolom sejajar pada desktop (1440px)
     Dan elemen "#footerClusterStatus" serta tombol ".btn-footer-reset" ("Reset Kuota Demo") tersedia dan responsif
 

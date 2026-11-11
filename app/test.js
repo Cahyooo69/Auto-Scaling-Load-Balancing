@@ -7,6 +7,7 @@ const {
   mergeRedisSeatLocks,
   releaseRedisCheckoutLock,
 } = require('./server');
+const { signJwt, verifyJwt } = require('./src/utils/jwt');
 
 // Unit test verifying atomic decrement algorithm & Lua script integrity
 function testAtomicLogic() {
@@ -153,8 +154,20 @@ async function testRedisLockHelpers() {
   );
 }
 
+function testJwtHelpers() {
+  console.log('Running testJwtHelpers...');
+  const tok = signJwt({ id: 7, email: 'user@wartiket.id', role: 'user' }, 60);
+  const decoded = verifyJwt(tok);
+  assert.strictEqual(decoded.id, 7);
+  assert.strictEqual(decoded.email, 'user@wartiket.id');
+  assert.strictEqual(verifyJwt(`${tok}tamper`), null, 'Tampered JWT signature must fail');
+  const expired = signJwt({ id: 7 }, -10);
+  assert.strictEqual(verifyJwt(expired), null, 'Expired JWT must be rejected');
+}
+
 (async () => {
   testAtomicLogic();
+  testJwtHelpers();
   await testRedisLockHelpers();
   console.log(' All unit tests passed successfully.');
   process.exit(0);

@@ -47,6 +47,7 @@
 html {
   overflow-x: clip;
   scrollbar-width: none;
+  scrollbar-gutter: stable;
 }
 
 html::-webkit-scrollbar {
@@ -100,7 +101,6 @@ label.card-select-toggle,
 .btn-pill-primary,
 .btn-pill-outline,
 .btn-search-submit,
-.btn-icon-search,
 .btn-text-link,
 .nav-link,
 .nav-brand,
@@ -154,10 +154,22 @@ textarea {
   position: relative;
   z-index: 1;
   width: 1440px;
-  padding-top: 16px;
+  padding-top: 0;
+  zoom: var(--boot-zoom, 1);
   transform-origin: 0 0;
   margin: 0;
   background-color: var(--color-cream);
+}
+
+html.wt-mobile #stage {
+  width: 100%;
+  padding-top: 0;
+  zoom: normal !important;
+  transform: none !important;
+}
+
+#spaMain {
+  min-height: 680px;
 }
 
 .container {
@@ -167,30 +179,81 @@ textarea {
   box-sizing: border-box;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.spa-page {
+  display: none;
+}
+
+@keyframes wt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+html:not([data-active-page]) .spa-page[data-page-section="beranda"],
+html[data-active-page="beranda"] .spa-page[data-page-section="beranda"],
+html[data-active-page="konser"] .spa-page[data-page-section="konser"],
+html[data-active-page="riwayat"] .spa-page[data-page-section="riwayat"],
+html[data-active-page="kontak"] .spa-page[data-page-section="kontak"],
+html[data-active-page="live-test"] .spa-page[data-page-section="live-test"],
+html[data-active-page="hasil-test"] .spa-page[data-page-section="hasil-test"],
+.spa-page.is-active {
+  display: block;
+}
+
+.spa-page.is-active {
+  animation: wt-fade-in 0.16s ease-out;
+}
+
+html.wt-booting .spa-page.is-active {
+  animation: none !important;
+}
+
+.spa-page.hidden {
+  display: none !important;
+}
+
 section[id],
 footer[id],
 .hero-card[id] {
-  scroll-margin-top: 24px;
+  scroll-margin-top: 112px;
 }
 
 .navbar {
   position: relative;
-  width: 1380px;
-  height: 84px;
-  margin: 0 auto 16px;
-  z-index: 80;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 116px;
+  min-height: 116px;
+  padding: 16px 30px;
+  box-sizing: border-box;
+  background: var(--color-cream);
+  margin: 0;
+  z-index: 100;
+}
+
+html.wt-mobile .navbar {
+  width: 100%;
+  height: auto;
+  min-height: 112px;
 }
 
 .navbar-inner {
   position: relative;
-  width: 1380px;
+  width: 100%;
+  max-width: 1380px;
   height: 84px;
+  margin: 0 auto;
   background: rgba(255, 255, 255, 0.98);
   border-radius: var(--radius-pill);
   padding: 0 22px 0 28px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
+  column-gap: 20px;
   box-shadow: var(--shadow-nav);
   border: 1px solid rgba(143, 174, 117, 0.35);
 }
@@ -200,6 +263,11 @@ footer[id],
   align-items: center;
   gap: 12px;
   text-decoration: none;
+  justify-self: start;
+}
+
+.navbar nav {
+  justify-self: center;
 }
 
 .nav-brand-icon {
@@ -243,7 +311,7 @@ footer[id],
   display: flex;
   align-items: center;
   list-style: none;
-  gap: 36px;
+  gap: 20px;
 }
 
 .nav-link {
@@ -254,6 +322,7 @@ footer[id],
   text-decoration: none;
   padding: 8px 4px;
   position: relative;
+  white-space: nowrap;
   transition: color 0.2s ease;
 }
 
@@ -277,24 +346,12 @@ footer[id],
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-self: end;
 }
 
-.btn-icon-search {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: rgba(143, 174, 117, 0.18);
-  border: 1px solid rgba(47, 93, 42, 0.18);
-  display: flex;
-  align-items: center;
+#navBtnAuth {
+  min-width: 112px;
   justify-content: center;
-  color: var(--color-forest);
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.btn-icon-search:hover {
-  background: rgba(143, 174, 117, 0.35);
-  transform: scale(1.05);
 }
 
 .btn-pill-primary {
@@ -355,18 +412,36 @@ footer[id],
    ========================================================================== */
 .hero-card {
   position: relative;
+  height: 490px;
   min-height: 490px;
   margin: 0 auto;
   border-radius: var(--radius-hero);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(20, 38, 17, 0.45) 0%, rgba(20, 38, 17, 0.72) 100%),
-              url('https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=2200&q=85') center/cover no-repeat;
+  background: linear-gradient(180deg, rgba(16, 26, 14, 0.45) 0%, rgba(16, 26, 14, 0.72) 100%),
+              url('/img/hero-bg.jpg') center/cover no-repeat #101A0E;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 72px 48px;
   text-align: center;
   box-shadow: 0 20px 50px rgba(20, 36, 17, 0.16);
+}
+
+.hero-search-section {
+  position: relative;
+  z-index: 40;
+  margin: 18px auto 0;
+}
+
+.hero-search-form {
+  display: grid;
+  grid-template-columns: 1fr 190px 190px 150px;
+  gap: 12px;
+  background: var(--color-sage);
+  padding: 12px 14px;
+  border-radius: var(--radius-pill);
+  align-items: center;
+  box-shadow: var(--shadow-soft);
 }
 
 .hero-inner {
@@ -831,6 +906,7 @@ footer[id],
 
 .carousel-viewport {
   width: 1380px;
+  min-height: 495px;
   overflow: hidden;
   padding: 10px 0 18px;
   outline: none;
@@ -1404,27 +1480,6 @@ footer[id],
 
 .nav-dropdown-panel.active {
   display: block;
-}
-
-.nav-search-panel {
-  width: 960px;
-}
-
-.nav-search-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.nav-search-form {
-  display: grid;
-  grid-template-columns: 1fr 190px 190px 150px;
-  gap: 12px;
-  background: var(--color-sage);
-  padding: 12px 14px;
-  border-radius: var(--radius-pill);
-  align-items: center;
 }
 
 .nav-account-panel {
@@ -2220,6 +2275,222 @@ footer[id],
 }
 
 /* ==========================================================================
+   11c. RIWAYAT PEMESANAN & LIVE STRESS TEST PANEL
+   ========================================================================== */
+.section-orders,
+.section-stress,
+.section-results {
+  background-color: var(--color-cream);
+  padding: 56px 0 72px;
+}
+
+.panel-card {
+  background: var(--color-white);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+  padding: 32px;
+}
+
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.orders-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.orders-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--color-mint);
+  color: var(--color-forest);
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.orders-table th:first-child { border-radius: 12px 0 0 12px; }
+.orders-table th:last-child { border-radius: 0 12px 12px 0; }
+
+.orders-table td {
+  padding: 14px;
+  border-bottom: 1px solid rgba(143, 174, 117, 0.2);
+  vertical-align: middle;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-pill.is-paid { background: #d9f2d9; color: #164416; }
+.status-pill.is-pending { background: #fefcbf; color: #744210; }
+.status-pill.is-expired { background: #fed7d7; color: #9b2c2c; }
+
+.stress-controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 26px;
+}
+
+.stress-select {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-cream);
+  padding: 0 18px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  outline: none;
+}
+
+.stress-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stress-metric-card {
+  background: var(--color-cream);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-inner);
+  padding: 18px 20px;
+}
+
+.stress-metric-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.stress-metric-val {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 800;
+  color: var(--color-forest);
+}
+
+.sla-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sla-badge.is-pass { background: #d9f2d9; color: #164416; border: 1px solid #2f5d2a; }
+.sla-badge.is-fail { background: #fed7d7; color: #9b2c2c; border: 1px solid #c53030; }
+
+#ordersContent {
+  min-height: 140px;
+}
+
+.stress-quota-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 22px;
+  border-radius: var(--radius-inner);
+  background: var(--color-mint);
+  border: 1px solid var(--color-border);
+}
+
+.stress-quota-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-forest);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.stress-quota-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stress-quota-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.stress-quota-chip strong {
+  font-family: var(--font-mono);
+  color: var(--color-forest);
+}
+
+.worker-dist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 52px;
+}
+
+.worker-dist-row {
+  display: grid;
+  grid-template-columns: 170px 1fr 70px;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.worker-bar-track {
+  height: 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-mint);
+  overflow: hidden;
+}
+
+.worker-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-forest);
+  transition: width 0.3s ease;
+}
+
+/* ==========================================================================
    11b. RESPONSIVE MOBILE & TABLET SENTUH (TANPA MENGGANGGU ZOOM DESKTOP)
    ========================================================================== */
 body.is-mobile .scaled-overlay-root {
@@ -2230,7 +2501,7 @@ body.is-mobile .scaled-overlay-root {
 
 body.is-mobile #stage {
   width: 100%;
-  padding-top: 12px;
+  padding-top: 0;
   zoom: normal !important;
   transform: none !important;
 }
@@ -2242,13 +2513,19 @@ body.is-mobile .container {
 }
 
 body.is-mobile .navbar {
+  position: relative;
+  top: 0;
+  left: 0;
   width: 100%;
   height: auto;
-  padding: 0 16px;
-  margin-bottom: 14px;
+  min-height: 112px;
+  padding: 10px 16px;
+  margin-bottom: 4px;
+  z-index: 100;
 }
 
 body.is-mobile .navbar-inner {
+  display: flex;
   width: 100%;
   height: auto;
   border-radius: 20px;
@@ -2285,13 +2562,23 @@ body.is-mobile .navbar nav {
 
 body.is-mobile .nav-menu {
   width: 100%;
-  justify-content: space-around;
-  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
 }
 
 body.is-mobile .nav-link {
-  font-size: 14px;
-  padding: 6px 4px;
+  font-size: 13px;
+  padding: 5px 4px;
+}
+
+body.is-mobile .stress-controls-grid,
+body.is-mobile .stress-metrics-grid {
+  grid-template-columns: 1fr;
+}
+
+body.is-mobile .worker-dist-row {
+  grid-template-columns: 110px 1fr 54px;
 }
 
 body.is-mobile .nav-actions {
@@ -2299,14 +2586,10 @@ body.is-mobile .nav-actions {
   gap: 8px;
 }
 
-body.is-mobile .btn-icon-search {
-  width: 38px;
-  height: 38px;
-}
-
 body.is-mobile .nav-actions .btn-pill-primary {
   padding: 9px 14px;
   font-size: 13px;
+  min-width: 92px;
 }
 
 body.is-mobile .nav-dropdown-panel {
@@ -2317,10 +2600,21 @@ body.is-mobile .nav-dropdown-panel {
   padding: 16px;
 }
 
-body.is-mobile .nav-search-form {
+body.is-mobile .hero-search-section.container {
+  width: calc(100% - 32px);
+  padding-left: 0;
+  padding-right: 0;
+  margin-top: 14px;
+}
+
+body.is-mobile .hero-search-form {
   grid-template-columns: 1fr;
   border-radius: 20px;
   padding: 12px;
+}
+
+body.is-mobile .hero-card.container {
+  height: auto;
 }
 
 body.is-mobile .autocomplete-dropdown {
@@ -2597,7 +2891,8 @@ body.is-mobile .toast-box {
     print-color-adjust: exact !important;
   }
 
-  /* Sembunyikan seluruh konten halaman (#stage berisi navbar/section) serta tombol non-tiket */
+  /* Sembunyikan seluruh konten halaman (#navbar, #stage) serta tombol non-tiket */
+  #navbar,
   #stage,
   #multiSelectBar,
   #loginModal,
