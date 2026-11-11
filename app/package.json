@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "pg": "^8.23.1"
   }
 }

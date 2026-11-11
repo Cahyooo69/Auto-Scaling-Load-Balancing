@@ -1,24 +1,24 @@
 # Auto-Scaling & Load Balancing Sistem War Tiket Menggunakan Docker Swarm
 
-> **Tugas Besar Mata Kuliah Cloud Computing (3 SKS)**  
-> **Studi Kasus:** Sistem War Tiket Konser Musik  
-> **Kelompok:** 1  
-> **Anggota Tim:**  
-> - Muhammad Ilham Nurcahyo (09040623063)  
-> - Hafid Aji Fauzan (0920623027)  
-> - Muhammad Daud Rizaldiansyah (09040623061)  
-> - Davin Aryaguna Hermansyah (09020623020)  
+> **Tugas Besar Mata Kuliah Cloud Computing (3 SKS)****Studi Kasus:** Sistem War Tiket Konser Musik**Kelompok:** 1**Anggota Tim:**
+>
+> - Muhammad Ilham Nurcahyo (09040623063)
+> - Hafid Aji Fauzan (0920623027)
+> - Muhammad Daud Rizaldiansyah (09040623061)
+> - Davin Aryaguna Hermansyah (09020623020)
 
 ---
 
 ## 1. Ringkasan Proyek
 
 Sistem **War Tiket** menghadapi karakteristik beban komputasi yang sangat ekstrem: lonjakan ribuan hingga jutaan *request* secara simultan dalam hitungan detik (*flash crowd traffic*). Masalah kritis yang sering terjadi pada skenario ini meliputi:
+
 1. **Server Crash / Out of Memory (OOM)** akibat ketidakmampuan menangani lonjakan transaksi bersamaan.
 2. **Race Condition / Overselling**: Tiket terjual melebihi kuota stok yang tersedia karena proses pengecekan dan pengurangan stok tidak berlangsung secara atomik.
 3. **Single Point of Failure (SPOF)**: Jika satu server mati, seluruh transaksi terhenti.
 
 Untuk mengatasi permasalahan tersebut, proyek ini mengimplementasikan:
+
 - **Docker Swarm Ingress & Overlay Network**: Mengorkestrasi klaster container dengan perutean beban internal (*Routing Mesh*).
 - **Nginx Reverse Proxy & Load Balancer**: Gerbang masuk tunggal (Port 80) yang mendistribusikan trafik masuk ke seluruh replika worker backend.
 - **Node.js Mock API (Scalable Workers)**: Service pemrosesan *checkout* tiket dengan penundaan buatan (*artificial delay*) 50–100ms dan skalabilitas dinamis dari **2 hingga 8 replika**.
@@ -42,7 +42,7 @@ flowchart TD
 
         subgraph SwarmOverlay["Docker Overlay Network: wartiket-net"]
             VIP["Docker Swarm Routing Mesh & Internal VIP<br/>(Service: app:3000)"]
-            
+          
             subgraph AppReplicas["Node.js Mock API Replicas (2 -> 8 Worker Containers)"]
                 APP1["App Replica 1<br/>cpus: 0.25, mem: 256M"]
                 APP2["App Replica 2<br/>cpus: 0.25, mem: 256M"]
@@ -75,19 +75,20 @@ flowchart TD
 
 Sistem menggunakan Docker Overlay Network berkonfigurasi `attachable: true`:
 
-| Parameter Jaringan | Spesifikasi | Keterangan |
-|---|---|---|
-| **Nama Jaringan** | `wartiket-net` | Jaringan terisolasi antar container |
-| **Driver Jaringan** | `overlay` | Mendukung multi-host routing & Docker Swarm ingress |
-| **Port Publik** | `80:80` | Port host yang diekspos oleh container Nginx |
-| **Internal Routing** | `app:3000` & `redis:6379` | Layanan backend dan redis tidak diekspos ke publik host |
-| **Service Discovery** | Docker Internal DNS + IPVS | Resolusi otomatis nama `app` ke Virtual IP (VIP) Swarm |
+| Parameter Jaringan          | Spesifikasi                   | Keterangan                                               |
+| --------------------------- | ----------------------------- | -------------------------------------------------------- |
+| **Nama Jaringan**     | `wartiket-net`              | Jaringan terisolasi antar container                      |
+| **Driver Jaringan**   | `overlay`                   | Mendukung multi-host routing & Docker Swarm ingress      |
+| **Port Publik**       | `80:80`                     | Port host yang diekspos oleh container Nginx             |
+| **Internal Routing**  | `app:3000` & `redis:6379` | Layanan backend dan redis tidak diekspos ke publik host  |
+| **Service Discovery** | Docker Internal DNS + IPVS    | Resolusi otomatis nama `app` ke Virtual IP (VIP) Swarm |
 
 ---
 
 ## 4. Spesifikasi Komponen & Resource Limits
 
 Sesuai ketentuan teknis standar (3 SKS), seluruh container memiliki batasan ketat:
+
 ```yaml
 resources:
   limits:
@@ -96,6 +97,7 @@ resources:
 ```
 
 ### Rincian Komponen:
+
 1. **Nginx (`wartiket-nginx`)**:
    - Berfungsi sebagai reverse proxy dan buffer koneksi client.
    - Dikonfigurasi dengan `worker_connections 10240` dan HTTP/1.1 `keepalive 64` agar tidak kehabisan *file descriptor* saat diuji 1000 VU.
@@ -122,14 +124,18 @@ resources:
 ## 5. Panduan Menjalankan Sistem (Langkah-demi-Langkah)
 
 ### A. Inisialisasi Docker Swarm
+
 Buka PowerShell / Terminal:
+
 ```bash
 # Inisialisasi Docker Swarm (jika belum aktif)
 docker swarm init
 ```
 
 ### B. Build Docker Image
+
 Jalankan proses build image backend dan load balancer:
+
 ```bash
 # Build image Node.js App
 docker build -t wartiket-app:latest ./app
@@ -139,13 +145,16 @@ docker build -t wartiket-nginx:latest ./nginx
 ```
 
 ### C. Deploy Stack ke Docker Swarm
+
 Deploy seluruh arsitektur menggunakan Docker Compose:
+
 ```bash
 # Deploy stack dengan nama 'wartiket'
 docker stack deploy -c docker-compose.yml wartiket
 ```
 
 Periksa status seluruh service dan task:
+
 ```bash
 # Lihat daftar service aktif
 docker stack services wartiket
@@ -159,54 +168,97 @@ docker stack ps wartiket
 ## 6. Skenario Pengujian & Live Demo
 
 ### Skenario 1: Sanity Check & Distribusi Load Balancing
+
 Uji dengan 20 request simultan menggunakan skrip Node.js:
+
 ```bash
 node test-quick.js
 ```
+
 *Output akan menampilkan tabel 20 transaksi yang tersebar di container yang berbeda (ditandai dengan `ServedBy` yang berganti-ganti).*
 
 ### Skenario 2: Dynamic Auto-Scaling (Skalasi 2 $\rightarrow$ 8 Replika)
+
 Saat lonjakan trafik war tiket terjadi, scale backend worker dari 2 menjadi 8 replika:
+
 ```bash
 docker service scale wartiket_app=8
 ```
+
 Verifikasi bahwa 8 replika kini aktif dalam hitungan detik:
+
 ```bash
 docker service ps wartiket_app
 ```
 
 Untuk mengembalikan (*scale down*):
+
 ```bash
 docker service scale wartiket_app=2
 ```
 
 ### Skenario 3: Load Testing 1000 VU (k6)
+
 Jalankan uji beban 3 menit bertahap (10 $\rightarrow$ 100 $\rightarrow$ 500 $\rightarrow$ 1000 VU) sesuai SLA (Response Time $< 200\text{ms}$, Error $< 1\%$):
 
 **Jika k6 terinstal di host:**
+
 ```bash
 k6 run load-test/load-test.js
 ```
 
 **Atau jalankan k6 via Docker Container (tanpa instalasi lokal):**
+
 ```bash
 docker run --rm -i -v "${PWD}/load-test:/load-test" --network host grafana/k6 run /load-test/load-test.js
 ```
 
-### Skenario 4: Disaster Recovery (DR) & Failover Execution
-Saat pengujian beban 1000 VU sedang berjalan:
-1. Buka terminal baru dan matikan paksa 2 container worker backend:
-   ```bash
-   # Dapatkan ID container app
-   docker ps --filter "name=wartiket_app" --format "{{.ID}}"
-   
-   # Matikan 2 container secara paksa
-   docker rm -f <ID_CONTAINER_1> <ID_CONTAINER_2>
-   ```
-2. **Hasil Observasi**:
-   - Docker Swarm secara otomatis mendeteksi matinya container dan langsung menjadwalkan ulang replika baru.
-   - Nginx bersama Swarm Routing Mesh mengalihkan trafik ke replika yang masih sehat (*self-healing failover*).
-   - Pengujian k6 tidak mengalami kegagalan transaksi (*zero downtime / zero transaction drop*).
+### Skenario 4: Disaster Recovery (DR) & Failover Execution (Revisi Ketahanan Sistem)
+
+Sistem dirancang tahan terhadap berbagai gangguan kegagalan container secara simultan:
+
+#### A. Ketahanan Gangguan Nginx (Container Nginx Mati):
+
+- Nginx dikonfigurasi dengan **`replicas: 2`** (High Availability).
+- Kedua replika terhubung ke Docker Swarm Ingress Routing Mesh pada Port 80.
+- **Uji Coba**: Matikan paksa salah satu container Nginx:
+  ```bash
+  docker rm -f $(docker ps -q -f name=wartiket_nginx | Select-Object -First 1)
+  ```
+- **Hasil**: Website dan API di `http://localhost/` maupun `/health` tetap merespon seketika (0ms downtime) karena dialihkan ke container Nginx kedua oleh routing mesh, sementara Swarm otomatis menyalakan container pengganti.
+
+#### B. Ketahanan Gangguan Redis (Redis Mati / Crash):
+
+- Database Redis dilengkapi **AOF Volume Persistence** (`redis-data:/data`) dan restart policy `condition: any`.
+- Backend Node.js dilengkapi *Graceful Degradation* & auto-reconnect listener.
+- **Uji Coba**: Matikan paksa container Redis:
+  ```bash
+  docker rm -f $(docker ps -q -f name=wartiket_redis | Select-Object -First 1)
+  ```
+- **Hasil**:
+  1. API `/health` dan dashboard web tetap UP (tidak crash).
+  2. Saat Redis sedang restart (1–2 detik), permintaan `/tickets/buy` merespon HTTP 503 dengan status pemulihan terkontrol tanpa *unhandled error*.
+  3. Begitu Redis aktif kembali, ioredis otomatis tersambung, dan **kuota tiket yang tersisa tidak hilang** karena tersimpan di persistent volume AOF.
+
+#### C. Ketahanan Gangguan Worker Backend (Node.js App Mati):
+
+- Matikan paksa container worker:
+  ```bash
+  docker rm -f $(docker ps -q -f name=wartiket_app | Select-Object -First 1)
+  ```
+- **Hasil**: Nginx failover retries (`proxy_next_upstream`) otomatis mengarahkan trafik ke worker lain yang masih hidup.
+
+---
+
+### Skenario 5: Interactive Web Dashboard
+
+Buka browser di:
+
+```text
+http://localhost/
+```
+
+Dashboard menyediakan monitor status topologi cluster secara langsung, live kuota tiket, tombol beli tiket realtime, tombol uji batch 10 request untuk melihat persebaran load balancing antar kontainer, serta log aktivitas transaksi.
 
 ---
 
@@ -234,12 +286,12 @@ Saat pengujian beban 1000 VU sedang berjalan:
 
 ## 8. Pemenuhan Target Luaran Mingguan
 
-- [x] **Pertemuan 1: Planning & Architecture Design**
+- [X] **Pertemuan 1: Planning & Architecture Design**
   - Diagram arsitektur sistem (Mermaid).
   - Skema jaringan internal Docker (`overlay` network `wartiket-net`).
   - Spesifikasi awal `docker-compose.yml` dengan batasan CPU `0.25` dan RAM `256M`.
   - Repositori Git kelompok rapi dan terstruktur.
-- [x] **Pertemuan 2: Environment Setup & Core Deployment**
+- [X] **Pertemuan 2: Environment Setup & Core Deployment**
   - Seluruh container (Nginx, App, Redis) terkonfigurasi dan dapat berjalan *up & running*.
   - Resource limit diterapkan pada berkas compose.
-- [x] **Pertemuan 3 & 4 (Siap Pakai)**: Skrip k6 load testing dan skenario Disaster Recovery sudah siap diuji.
+- [X] **Pertemuan 3 & 4 (Siap Pakai)**: Skrip k6 load testing dan skenario Disaster Recovery sudah siap diuji.

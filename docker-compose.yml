@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
-  # Redis: In-memory store for atomic ticket locking & inventory management
+  # Redis: In-memory store for atomic ticket locking & inventory management (with AOF persistence)
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--save", "60 1", "--dir", "/data"]
     volumes:
       - redis-data:/data
     networks:
@@ -12,7 +10,9 @@ services:
     deploy:
       replicas: 1
       restart_policy:
-        condition: on-failure
+        condition: any
+        delay: 2s
+        window: 10s
       resources:
         limits:
           cpus: '0.25'
@@ -20,6 +20,43 @@ services:
         reservations:
           cpus: '0.10'
           memory: 64M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 2s
+
+  # Relational Database: PostgreSQL 16 (ACID storage for users, concerts, seats, transactions)
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=wartiket_db
+      - POSTGRES_USER=wartiket
+      - POSTGRES_PASSWORD=wartiket_secret
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 2s
+        window: 10s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wartiket -d wartiket_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
 
   # Node.js Mock API: Scalable worker service (2 -> 8 replicas)
   app:
@@ -32,13 +69,20 @@ services:
       - PORT=3000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=wartiket_db
+      - DB_USER=wartiket
+      - DB_PASSWORD=wartiket_secret
       - INITIAL_STOCK=1000
     networks:
       - wartiket-net
     deploy:
       replicas: 2
       restart_policy:
-        condition: on-failure
+        condition: any
+        delay: 2s
+        window: 10s
       update_config:
         parallelism: 2
         delay: 5s
@@ -52,12 +96,12 @@ services:
           memory: 64M
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 3s
 
-  # Nginx: Reverse Proxy & Ingress Load Balancer
+  # Nginx: Reverse Proxy & Ingress Load Balancer (High Availability: 2 Replicas)
   nginx:
     image: wartiket-nginx:latest
     build:
@@ -65,12 +109,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+      - "443:443"
     networks:
       - wartiket-net
     deploy:
-      replicas: 1
+      replicas: 2
       restart_policy:
-        condition: on-failure
+        condition: any
+        delay: 2s
+        window: 10s
       resources:
         limits:
           cpus: '0.25'
@@ -78,6 +125,12 @@ services:
         reservations:
           cpus: '0.10'
           memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
 
 networks:
   wartiket-net:
@@ -86,3 +139,4 @@ networks:
 
 volumes:
   redis-data:
+  db-data:

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1E3E1B"/>
+      <stop offset="60%" stop-color="#2F5D2A"/>
+      <stop offset="100%" stop-color="#47793B"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#8FAE75" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#1E3E1B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="500" fill="url(#bg)"/>
+  <rect width="800" height="500" fill="url(#spot)"/>
+  <g fill="none" stroke="#E8F2DC" stroke-opacity="0.3" stroke-width="2">
+    <path d="M120 0 L380 280"/>
+    <path d="M680 0 L420 280"/>
+    <circle cx="400" cy="235" r="78"/>
+  </g>
+  <text x="400" y="242" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="2">KONSER MUSIK RESMI</text>
+  <text x="400" y="276" text-anchor="middle" fill="#D6E8CD" font-family="system-ui, sans-serif" font-size="16" font-weight="600">wartiketkonser.id</text>
+</svg>
+

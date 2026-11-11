@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SISTEM WAR TIKET KONSER MUSIK</title>
+  <link rel="icon" type="image/svg+xml" href="/img/concert-fallback.svg">
+  <link rel="canonical" href="https://wartiketkonser.id/">
+  <meta property="og:url" content="https://wartiketkonser.id/">
+  <meta property="og:title" content="SISTEM WAR TIKET KONSER MUSIK">
+  <meta name="description"
+    content="SISTEM WAR TIKET KONSER MUSIK - Penjualan Tiket Konser Musik Cepat, Adil, dan Stabil didukung Docker Swarm Load Balancing, Redis Lua Atomic Lock, & PostgreSQL.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Nunito:wght@400;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+
+  <!-- Kanvas skala tetap 1440px agar proporsi visual seragam di semua zoom -->
+  <div id="stage">
+
+    <!-- TOP NAVBAR (Diam di paling atas halaman, tidak ikut turun saat scroll) -->
+    <header class="navbar" id="navbar" aria-label="Navigasi Utama">
+      <div class="navbar-inner">
+        <a href="/" class="nav-brand">
+          <div class="nav-brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path
+                d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+              <path d="M13 5v2" />
+              <path d="M13 17v2" />
+              <path d="M13 11v2" />
+            </svg>
+          </div>
+          <div class="nav-brand-text">
+            <span class="brand-line-1">SISTEM WAR TIKET</span>
+            <span class="brand-line-2">KONSER MUSIK</span>
+          </div>
+        </a>
+
+        <nav aria-label="Menu Utama">
+          <ul class="nav-menu">
+            <li><a href="/" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
+            <li><a href="/konser" class="nav-link" data-page="konser">Konser</a></li>
+            <li><a href="/kontak" class="nav-link" data-page="kontak">Kontak</a></li>
+          </ul>
+        </nav>
+
+        <div class="nav-actions">
+          <button type="button" id="btnToggleSearchPanel" class="btn-icon-search" title="Cari Konser"
+            aria-label="Buka Panel Pencarian" aria-expanded="false" onclick="toggleNavSearchPanel()">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+
+          <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            <span id="navAuthLabel">Masuk</span>
+          </button>
+        </div>
+
+        <!-- Panel pencarian turun di samping tombol Masuk (khusus Beranda & Konser) -->
+        <div id="navSearchPanel" class="nav-dropdown-panel nav-search-panel" role="dialog"
+          aria-label="Pencarian Konser">
+          <div class="nav-search-header">
+            <div
+              style="font-family: var(--font-heading); font-size: 18px; font-weight: 900; color: var(--color-forest);">
+              Cari Konser &amp; Filter Tiket</div>
+            <button type="button" class="modal-close-btn" style="position: static; width: 32px; height: 32px;"
+              aria-label="Tutup Panel Pencarian" onclick="closeNavSearchPanel()">&times;</button>
+          </div>
+          <form class="nav-search-form" onsubmit="handleSearchSubmit(event)" autocomplete="off">
+            <div class="search-field-pill">
+              <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input type="text" id="searchInput" placeholder="Cari artis, konser, atau venue..."
+                aria-label="Kata kunci konser">
+              <div id="searchAutocomplete" class="autocomplete-dropdown" role="listbox"></div>
+            </div>
+
+            <div class="search-field-pill">
+              <select id="cityFilter" aria-label="Filter Kota">
+                <option value="">Semua Kota</option>
+              </select>
+            </div>
+
+            <div class="search-field-pill">
+              <select id="dateFilter" aria-label="Filter Tanggal">
+                <option value="">Semua Tanggal</option>
+              </select>
+            </div>
+
+            <button type="submit" id="btnSearchSubmit" class="btn-search-submit">
+              <span>Cari Tiket</span>
+            </button>
+          </form>
+        </div>
+
+        <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
+          <div class="nav-account-meta">
+            <div id="dropdownUserName"
+              style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
+              User</div>
+            <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
+          </div>
+          <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
+            <span>Keluar Akun</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- HERO BANNER UTAMA -->
+      <header id="beranda" class="hero-card container">
+        <div class="hero-inner">
+          <div class="hero-badge">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path
+                d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+            </svg>
+            <span>Sistem War Tiket Konser Musik</span>
+          </div>
+
+          <h1 class="hero-title">
+            <span class="hero-line">SISTEM WAR TIKET</span>
+            <span class="hero-line">KONSER MUSIK</span>
+          </h1>
+
+          <p class="hero-subtitle">
+            Cepat, adil, dan stabil bahkan saat ribuan orang war bersamaan.
+          </p>
+
+          <a href="/konser" class="btn-pill-outline">
+            <span>Lihat Konser</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <!-- RINGKASAN SISTEM & MONITORING CLUSTER -->
+      <section id="welcome" class="section-welcome">
+        <div class="container welcome-container">
+          <div class="polaroid-wrapper">
+            <div class="polaroid-frame">
+              <div class="badge-circle-green">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <polyline points="9 12 11 14 15 10" />
+                </svg>
+                <span>Aman &amp;<br>Cepat</span>
+              </div>
+
+              <div class="polaroid-photo">
+                <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80"
+                  alt="Panggung Konser Musik Outdoor" decoding="async">
+              </div>
+
+              <div class="badge-circle-orange" title="Auto-Scaling Cloud Cluster">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="welcome-text">
+            <div class="section-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>Platform War Tiket Resmi</span>
+            </div>
+
+            <h2 class="welcome-title">Selamat Datang di SISTEM WAR TIKET KONSER MUSIK</h2>
+            <p class="welcome-desc">
+              Sistem penjualan tiket konser musik dengan arsitektur cloud-native yang adil, stabil, dan anti-down.
+              Menggunakan Docker Swarm Ingress Load Balancing, antrean atomic in-memory Redis Lua, serta pencatatan
+              permanen transaksi ke PostgreSQL. Bebas risiko overselling meski ribuan pengguna bertransaksi serentak.
+            </p>
+
+            <div class="welcome-actions">
+              <button type="button" class="btn-pill-primary" onclick="requireAuthAndOpenWar([1])">
+                <span>Mulai War</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+              <a href="/cara-war" class="btn-text-link">
+                <span>Pelajari Cara War</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </a>
+            </div>
+
+            <div class="cloud-chips-row">
+              <div class="cloud-chip">
+                <span class="dot-online"></span>
+                <span>Worker Node: <strong id="liveHostBadge"
+                    class="font-mono selectable-text">Memuat...</strong></span>
+              </div>
+              <div class="cloud-chip">
+                <span>Redis: <strong id="liveRedisBadge">Connected</strong></span>
+              </div>
+              <div class="cloud-chip">
+                <span>PostgreSQL 16: <strong id="liveDbBadge">Connected</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-inner">
+          <div>
+            <div class="footer-brand-row">
+              <div class="footer-brand-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+                  <path d="M13 5v2" />
+                  <path d="M13 17v2" />
+                  <path d="M13 11v2" />
+                </svg>
+              </div>
+              <div class="footer-brand-title">SISTEM WAR TIKET KONSER MUSIK</div>
+            </div>
+            <p class="footer-desc">
+              Platform penjualan tiket konser musik berbasis cloud-native dengan Docker Swarm Load Balancer, Redis
+              In-Memory Atomic Lock, dan PostgreSQL ACID Database.
+            </p>
+          </div>
+
+          <div>
+            <h4 class="footer-col-title">Navigasi Halaman</h4>
+            <ul class="footer-links">
+              <li><a href="/">Beranda</a></li>
+              <li><a href="/konser">Daftar Konser</a></li>
+              <li><a href="/kontak">Kontak &amp; Bantuan</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 class="footer-col-title">Informasi &amp; Kontrol Demo</h4>
+            <ul class="footer-links">
+              <li>Domain: <strong class="footer-highlight">wartiketkonser.id</strong></li>
+              <li>Tugas Besar Cloud Computing (3 SKS) &bull; Kelompok 1 (2026)</li>
+            </ul>
+
+            <div class="footer-status-pill" role="status">
+              <span class="dot-online"></span>
+              <span id="footerClusterStatus">Swarm Ready &bull; Redis: CONNECTED</span>
+            </div>
+
+            <div class="footer-action-wrap">
+              <button type="button" class="btn-footer-reset" onclick="resetSystemStock()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                <span>Reset Kuota Demo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <div>&copy; 2026 SISTEM WAR TIKET KONSER MUSIK. All rights reserved.</div>
+          <div>Infrastruktur: Docker Swarm Ingress Mesh &bull; Nginx &bull; Redis &bull; PostgreSQL 16</div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+
+</html>
