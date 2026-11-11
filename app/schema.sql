@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users(LOWER(email));
 
 -- 2. Table Concerts
 CREATE TABLE IF NOT EXISTS concerts (

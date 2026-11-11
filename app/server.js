@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
@@ -18,12 +19,23 @@ const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
 const DB_NAME = process.env.DB_NAME || 'wartiket_db';
 const DB_USER = process.env.DB_USER || 'wartiket';
 const DB_PASSWORD = process.env.DB_PASSWORD || 'wartiket_secret';
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || '12', 10);
 
 const TICKET_KEY = 'concert:tickets:stock';
 const INITIAL_STOCK = parseInt(process.env.INITIAL_STOCK || '1000', 10);
 
+const CONCERTS_CACHE_KEY = 'cache:concerts:list';
+const CONCERTS_CACHE_TTL_SEC = 10;
+const SEATS_CACHE_TTL_SEC = 5;
+const USER_CACHE_TTL_SEC = 60;
+const SESSION_TTL_SEC = 3600;
+
+const QUEUE_MAX_ACTIVE = parseInt(process.env.QUEUE_MAX_ACTIVE || '200', 10);
+const QUEUE_ACTIVE_TTL_MS = parseInt(process.env.QUEUE_ACTIVE_TTL_MS || '180000', 10);
+const QUEUE_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.QUEUE_HEARTBEAT_TIMEOUT_MS || '25000', 10);
+
 // ============================================================================
-// 1. REDIS ATOMIC LOCKING & LUA SCRIPTING
+// 1. REDIS ATOMIC LOCKING, DISTRIBUTED QUEUE & LUA SCRIPTING
 // ============================================================================
 
 // Atomic decrement Lua script: checks stock and decrements atomically
@@ -52,6 +64,65 @@ const LOCK_SEAT_LUA_SCRIPT = `
   end
 `;
 
+// Atomic ownership-checked unlock Lua script: prevents deleting another user's renewed lock
+const UNLOCK_SEAT_LUA_SCRIPT = `
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+  end
+  return 0
+`;
+
+// Distributed anti-stuck queue sync: evicts expired/ghost slots & promotes FIFO waiters atomically
+const QUEUE_SYNC_LUA_SCRIPT = `
+  local waitKey = KEYS[1]
+  local activeKey = KEYS[2]
+  local hbKey = KEYS[3]
+  local nowMs = tonumber(ARGV[1])
+  local maxActive = tonumber(ARGV[2])
+  local activeTtlMs = tonumber(ARGV[3])
+  local hbTimeoutMs = tonumber(ARGV[4])
+  local token = ARGV[5] or ''
+
+  redis.call('ZREMRANGEBYSCORE', activeKey, '-inf', nowMs)
+
+  local staleWaiters = redis.call('ZRANGEBYSCORE', hbKey, '-inf', nowMs - hbTimeoutMs)
+  for i = 1, #staleWaiters do
+    redis.call('ZREM', waitKey, staleWaiters[i])
+    redis.call('ZREM', hbKey, staleWaiters[i])
+  end
+
+  local activeCount = redis.call('ZCARD', activeKey)
+  local freeSlots = maxActive - activeCount
+  if freeSlots > 0 then
+    local promoted = redis.call('ZPOPMIN', waitKey, freeSlots)
+    for i = 1, #promoted, 2 do
+      local tok = promoted[i]
+      redis.call('ZREM', hbKey, tok)
+      redis.call('ZADD', activeKey, nowMs + activeTtlMs, tok)
+    end
+  end
+
+  local totalWaiting = redis.call('ZCARD', waitKey)
+  activeCount = redis.call('ZCARD', activeKey)
+
+  if token == '' then
+    return { 'SYNCED', 0, totalWaiting, activeCount, 0 }
+  end
+
+  local activeExp = redis.call('ZSCORE', activeKey, token)
+  if activeExp then
+    return { 'ADMITTED', 0, totalWaiting, activeCount, math.max(0, tonumber(activeExp) - nowMs) }
+  end
+
+  local rank = redis.call('ZRANK', waitKey, token)
+  if rank then
+    redis.call('ZADD', hbKey, nowMs, token)
+    return { 'QUEUED', rank + 1, totalWaiting, activeCount, 0 }
+  end
+
+  return { 'EXPIRED', -1, totalWaiting, activeCount, 0 }
+`;
+
 let isRedisReady = false;
 
 const redis = new Redis({
@@ -73,6 +144,16 @@ redis.defineCommand('atomicBuyTicket', {
 redis.defineCommand('atomicLockSeat', {
   numberOfKeys: 1,
   lua: LOCK_SEAT_LUA_SCRIPT,
+});
+
+redis.defineCommand('atomicUnlockSeat', {
+  numberOfKeys: 1,
+  lua: UNLOCK_SEAT_LUA_SCRIPT,
+});
+
+redis.defineCommand('queueSync', {
+  numberOfKeys: 3,
+  lua: QUEUE_SYNC_LUA_SCRIPT,
 });
 
 redis.on('connect', () => {
@@ -115,7 +196,7 @@ const pool = new Pool({
   database: DB_NAME,
   user: DB_USER,
   password: DB_PASSWORD,
-  max: 30, // Optimized connection pool limit for high-concurrency Swarm nodes
+  max: DB_POOL_MAX, // Bounded pool so 8x Swarm replicas stay within PostgreSQL max_connections
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 3000,
   statement_timeout: 5000,
@@ -140,15 +221,15 @@ async function checkDbConnection() {
   }
 }
 
-async function initDatabaseSchema() {
+async function initDatabaseSchema(attempt = 1) {
   try {
     const isConnected = await checkDbConnection();
     if (!isConnected) {
-      console.warn(`[Database] PostgreSQL not immediately reachable at ${DB_HOST}:${DB_PORT}. Will auto-retry.`);
+      console.warn(`[Database] PostgreSQL not reachable at ${DB_HOST}:${DB_PORT} (attempt ${attempt}). Retrying in 2.5s...`);
+      if (attempt < 15) setTimeout(() => initDatabaseSchema(attempt + 1), 2500);
       return;
     }
 
-    // Verify if users table exists
     const checkTable = await pool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -162,21 +243,51 @@ async function initDatabaseSchema() {
       const seedFile = path.join(__dirname, 'seed.sql');
 
       if (fs.existsSync(schemaFile)) {
-        const schemaSql = fs.readFileSync(schemaFile, 'utf8');
-        await pool.query(schemaSql);
+        await pool.query(fs.readFileSync(schemaFile, 'utf8'));
         console.log(`[Database] schema.sql executed successfully.`);
       }
       if (fs.existsSync(seedFile)) {
-        const seedSql = fs.readFileSync(seedFile, 'utf8');
-        await pool.query(seedSql);
+        await pool.query(fs.readFileSync(seedFile, 'utf8'));
         console.log(`[Database] seed.sql executed successfully.`);
       }
     } else {
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))').catch(() => {});
       console.log(`[Database] Database already initialized and verified.`);
     }
   } catch (err) {
     console.warn(`[Database] Init verification warning: ${err.message}`);
+    if (attempt < 15) setTimeout(() => initDatabaseSchema(attempt + 1), 2500);
   }
+}
+
+async function scanAndDelete(pattern, redisClient = redis) {
+  let cursor = '0';
+  let deleted = 0;
+  do {
+    const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+    cursor = nextCursor;
+    if (keys.length > 0) {
+      await redisClient.del(...keys);
+      deleted += keys.length;
+    }
+  } while (cursor !== '0');
+  return deleted;
+}
+
+async function invalidateConcertCache(concertId, redisClient = redis, redisAvailable = isRedisReady) {
+  if (!redisAvailable) return;
+  const keys = [CONCERTS_CACHE_KEY];
+  if (concertId) keys.push(`cache:concert:${concertId}:seats`);
+  await redisClient.del(...keys).catch(() => {});
+}
+
+function extractSessionToken(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.match(/(?:^|;\s*)wt_session=([^;]+)/);
+  if (match) return decodeURIComponent(match[1]);
+  return req.query?.token ? String(req.query.token).trim() : '';
 }
 
 // Simulated real-world validation delay (30-60ms)
@@ -192,7 +303,6 @@ const artificialDelay = (min = 30, max = 60) => {
 const PAGE_ROUTES = [
   { paths: ['/', '/index.html'], file: 'index.html' },
   { paths: ['/konser', '/concerts.html'], file: 'concerts.html' },
-  { paths: ['/cara-war', '/guide.html'], file: 'guide.html' },
   { paths: ['/kontak', '/contact.html'], file: 'contact.html' },
 ];
 
@@ -248,37 +358,51 @@ app.get('/api/system/info', async (req, res) => {
   });
 });
 
-// --- AUTHENTICATION API (TAHAP 2 LOGIN) ---
+// --- AUTHENTICATION & SHARED SESSION API (TAHAP 2 LOGIN) ---
 app.post(['/api/auth/login', '/api/login'], async (req, res) => {
   const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ success: false, message: 'Email wajib diisi!' });
   }
 
+  const trimmedEmail = String(email).trim();
+  const normalizedEmail = trimmedEmail.toLowerCase();
+  const userCacheKey = `cache:user:email:${normalizedEmail}`;
+
   try {
-    if (!isDbReady) {
-      await checkDbConnection();
+    let user = null;
+
+    // 1. Check Redis user lookup cache first to avoid repeated DB queries under war spikes
+    if (isRedisReady) {
+      try {
+        const cached = await redis.get(userCacheKey);
+        if (cached) user = JSON.parse(cached);
+      } catch (e) {}
     }
 
-    let user;
-    if (isDbReady) {
-      try {
-        const q = await pool.query(
-          'SELECT id, name, email, phone, id_card, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
-          [String(email).trim()]
-        );
-        if (q.rows.length > 0) {
-          user = q.rows[0];
+    if (!user) {
+      if (!isDbReady) await checkDbConnection();
+
+      if (isDbReady) {
+        try {
+          const q = await pool.query(
+            'SELECT id, name, email, phone, id_card, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+            [trimmedEmail]
+          );
+          if (q.rows.length > 0) {
+            user = q.rows[0];
+            if (isRedisReady) {
+              redis.set(userCacheKey, JSON.stringify(user), 'EX', USER_CACHE_TTL_SEC).catch(() => {});
+            }
+          }
+        } catch (dbErr) {
+          isDbReady = false;
         }
-      } catch (dbErr) {
-        // Koneksi idle pool mungkin baru terputus; jatuh ke fallback demo users
-        isDbReady = false;
       }
     }
 
     // Fallback demo users if DB is temporarily reconnecting
     if (!user) {
-      const normalizedEmail = String(email).trim().toLowerCase();
       const demoUsers = {
         'dosen@wartiket.id': { id: 1, name: 'Dr. Ir. Budi Santoso, M.Kom', email: 'dosen@wartiket.id', phone: '081122334455', id_card: '3171010101750001', role: 'lecturer' },
         'mahasiswa1@wartiket.id': { id: 2, name: 'Kelompok 1 Cloud Lead', email: 'mahasiswa1@wartiket.id', phone: '081234567890', id_card: '3171020202990002', role: 'student' },
@@ -306,22 +430,193 @@ app.post(['/api/auth/login', '/api/login'], async (req, res) => {
       return res.status(401).json({ success: false, message: 'Pengguna tidak ditemukan. Silakan gunakan Auto-Fill Demo!' });
     }
 
+    const userPayload = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone || '081234567890',
+      idCard: user.id_card || '3171012345670001',
+      role: user.role || 'user',
+    };
+
+    // Persist shared session in Redis so every Swarm worker node recognizes the user
+    const token = crypto.randomUUID();
+    if (isRedisReady) {
+      await redis.set(`session:${token}`, JSON.stringify(userPayload), 'EX', SESSION_TTL_SEC).catch(() => {});
+    }
+    res.cookie('wt_session', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: SESSION_TTL_SEC * 1000,
+      path: '/',
+    });
+
     return res.json({
       success: true,
       message: 'Login berhasil!',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone || '081234567890',
-        idCard: user.id_card || '3171012345670001',
-        role: user.role || 'user'
-      },
+      token,
+      user: userPayload,
       servedBy: os.hostname(),
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Gagal login', error: err.message });
   }
+});
+
+app.get('/api/auth/session', async (req, res) => {
+  const token = extractSessionToken(req);
+  if (!token) {
+    return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
+  }
+  if (!isRedisReady) {
+    return res.status(503).json({ authenticated: false, degraded: true, servedBy: os.hostname() });
+  }
+  try {
+    const raw = await redis.get(`session:${token}`);
+    if (!raw) {
+      return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
+    }
+    await redis.expire(`session:${token}`, SESSION_TTL_SEC).catch(() => {});
+    return res.json({ authenticated: true, user: JSON.parse(raw), servedBy: os.hostname() });
+  } catch (err) {
+    return res.status(500).json({ authenticated: false, error: err.message, servedBy: os.hostname() });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  const token = extractSessionToken(req);
+  if (token && isRedisReady) {
+    await redis.del(`session:${token}`).catch(() => {});
+  }
+  res.clearCookie('wt_session', { path: '/' });
+  return res.json({ success: true, servedBy: os.hostname() });
+});
+
+// --- DISTRIBUTED ANTI-STUCK QUEUE API (REDIS WAITING ROOM) ---
+const QUEUE_WAIT_KEY = 'queue:waiting';
+const QUEUE_ACTIVE_KEY = 'queue:active';
+const QUEUE_HB_KEY = 'queue:heartbeat';
+const QUEUE_SEQ_KEY = 'queue:seq';
+
+function formatQueueState(syncResult, queueToken, ticketNumber) {
+  const [status, position, totalWaiting, activeCount, remainingMs] = syncResult;
+  const aheadCount = status === 'QUEUED' ? Math.max(0, Number(position) - 1) : 0;
+  const estimatedWaitSec = status === 'QUEUED' ? Math.max(1, Math.ceil(aheadCount * 0.25)) : 0;
+  return {
+    success: status !== 'EXPIRED',
+    status,
+    queueToken,
+    ticketNumber: Number(ticketNumber || 0),
+    position: Number(position),
+    aheadCount,
+    totalWaiting: Number(totalWaiting),
+    activeCount: Number(activeCount),
+    maxActive: QUEUE_MAX_ACTIVE,
+    estimatedWaitSec,
+    expiresInSec: Math.ceil(Number(remainingMs || 0) / 1000),
+    servedBy: os.hostname(),
+  };
+}
+
+app.post('/api/queue/join', async (req, res) => {
+  const userId = parseInt(req.body?.userId, 10) || 0;
+  const concertId = parseInt(req.body?.concertId, 10) || 1;
+  const queueToken = crypto.randomUUID();
+  const nowMs = Date.now();
+
+  if (!isRedisReady) {
+    // Graceful degradation: allow direct admission if Redis queue is temporarily reconnecting
+    return res.json({
+      success: true,
+      degraded: true,
+      status: 'ADMITTED',
+      queueToken,
+      ticketNumber: 1,
+      position: 0,
+      aheadCount: 0,
+      totalWaiting: 0,
+      activeCount: 1,
+      maxActive: QUEUE_MAX_ACTIVE,
+      estimatedWaitSec: 0,
+      expiresInSec: 180,
+      servedBy: os.hostname(),
+    });
+  }
+
+  try {
+    const ticketNumber = await redis.incr(QUEUE_SEQ_KEY);
+    await redis
+      .multi()
+      .zadd(QUEUE_WAIT_KEY, ticketNumber, queueToken)
+      .zadd(QUEUE_HB_KEY, nowMs, queueToken)
+      .set(`queue:meta:${queueToken}`, JSON.stringify({ userId, concertId, ticketNumber, joinedAt: nowMs }), 'EX', 600)
+      .exec();
+
+    const syncRes = await redis.queueSync(
+      QUEUE_WAIT_KEY,
+      QUEUE_ACTIVE_KEY,
+      QUEUE_HB_KEY,
+      nowMs,
+      QUEUE_MAX_ACTIVE,
+      QUEUE_ACTIVE_TTL_MS,
+      QUEUE_HEARTBEAT_TIMEOUT_MS,
+      queueToken
+    );
+
+    return res.json(formatQueueState(syncRes, queueToken, ticketNumber));
+  } catch (err) {
+    return res.status(503).json({ success: false, message: `Antrean sibuk: ${err.message}`, servedBy: os.hostname() });
+  }
+});
+
+app.get('/api/queue/status', async (req, res) => {
+  const queueToken = String(req.query.token || '').trim();
+  if (!queueToken) {
+    return res.status(400).json({ success: false, message: 'Token antrean wajib disertakan.', servedBy: os.hostname() });
+  }
+  if (!isRedisReady) {
+    return res.status(503).json({ success: false, degraded: true, message: 'Redis sedang memulihkan koneksi.', servedBy: os.hostname() });
+  }
+
+  try {
+    const nowMs = Date.now();
+    const [syncRes, metaRaw] = await Promise.all([
+      redis.queueSync(
+        QUEUE_WAIT_KEY,
+        QUEUE_ACTIVE_KEY,
+        QUEUE_HB_KEY,
+        nowMs,
+        QUEUE_MAX_ACTIVE,
+        QUEUE_ACTIVE_TTL_MS,
+        QUEUE_HEARTBEAT_TIMEOUT_MS,
+        queueToken
+      ),
+      redis.get(`queue:meta:${queueToken}`),
+    ]);
+    const meta = metaRaw ? JSON.parse(metaRaw) : {};
+    const payload = formatQueueState(syncRes, queueToken, meta.ticketNumber);
+    if (payload.status === 'EXPIRED') {
+      return res.status(410).json({ ...payload, message: 'Sesi antrean berakhir atau kedaluwarsa. Silakan masuk antrean ulang.' });
+    }
+    return res.json(payload);
+  } catch (err) {
+    return res.status(503).json({ success: false, message: err.message, servedBy: os.hostname() });
+  }
+});
+
+app.post('/api/queue/leave', async (req, res) => {
+  const queueToken = String(req.body?.queueToken || req.query?.token || '').trim();
+  if (queueToken && isRedisReady) {
+    await redis
+      .multi()
+      .zrem(QUEUE_WAIT_KEY, queueToken)
+      .zrem(QUEUE_ACTIVE_KEY, queueToken)
+      .zrem(QUEUE_HB_KEY, queueToken)
+      .del(`queue:meta:${queueToken}`)
+      .exec()
+      .catch(() => {});
+  }
+  return res.json({ success: true, servedBy: os.hostname() });
 });
 
 function getFallbackConcerts() {
@@ -365,9 +660,20 @@ function getFallbackConcerts() {
   ];
 }
 
-// --- CONCERTS API (TAHAP 3 KATALOG) ---
+// --- CONCERTS API (TAHAP 3 KATALOG + REDIS CACHE) ---
 app.get('/api/concerts', async (req, res) => {
   try {
+    if (isRedisReady) {
+      try {
+        const cached = await redis.get(CONCERTS_CACHE_KEY);
+        if (cached) {
+          const list = JSON.parse(cached).map((c) => ({ ...c, servedBy: os.hostname() }));
+          res.set('X-Cache', 'HIT');
+          return res.json(list);
+        }
+      } catch (e) {}
+    }
+
     if (!isDbReady) await checkDbConnection();
 
     if (isDbReady) {
@@ -378,7 +684,7 @@ app.get('/api/concerts', async (req, res) => {
           ORDER BY id ASC
         `);
         if (q.rows.length > 0) {
-          return res.json(q.rows.map(c => ({
+          const rows = q.rows.map((c) => ({
             id: c.id,
             title: c.title,
             artist: c.artist,
@@ -388,14 +694,20 @@ app.get('/api/concerts', async (req, res) => {
             totalSeats: c.total_seats,
             availableSeats: c.available_seats,
             imageUrl: c.image_url,
-            servedBy: os.hostname()
-          })));
+            servedBy: os.hostname(),
+          }));
+          if (isRedisReady) {
+            redis.set(CONCERTS_CACHE_KEY, JSON.stringify(rows), 'EX', CONCERTS_CACHE_TTL_SEC).catch(() => {});
+          }
+          res.set('X-Cache', 'MISS');
+          return res.json(rows);
         }
       } catch (dbErr) {
         isDbReady = false;
       }
     }
 
+    res.set('X-Cache', 'FALLBACK');
     return res.json(getFallbackConcerts());
   } catch (err) {
     return res.json(getFallbackConcerts());
@@ -434,54 +746,75 @@ function buildFallbackSeats(concertId) {
   return fallbackSeats;
 }
 
-// --- SEATS API (TAHAP 4 DENAH KURSI) ---
+// --- SEATS API (TAHAP 4 DENAH KURSI + CACHE + LIVE LOCK MERGE) ---
 app.get('/api/concerts/:id/seats', async (req, res) => {
   const concertId = parseInt(req.params.id, 10) || 1;
+  const seatsCacheKey = `cache:concert:${concertId}:seats`;
   res.set('Cache-Control', 'no-store');
 
   try {
-    if (!isDbReady) await checkDbConnection();
+    let baseSeats = null;
 
-    if (isDbReady) {
+    if (isRedisReady) {
       try {
-        // Fetch the 60 visual grid seats (baris A-E)
-        const q = await pool.query(`
-          SELECT id, concert_id, seat_number, category, status, price
-          FROM seats
-          WHERE concert_id = $1 AND seat_number NOT LIKE 'FEST-%'
-          ORDER BY seat_number ASC
-        `, [concertId]);
-
-        if (q.rows.length > 0) {
-          const dbSeats = q.rows.map(s => ({
-            id: s.id,
-            seatNumber: s.seat_number,
-            category: s.category,
-            status: s.status,
-            price: parseFloat(s.price)
-          }));
-          const syncedSeats = await mergeRedisSeatLocks(concertId, dbSeats);
-          return res.json({
-            concertId,
-            seats: syncedSeats,
-            servedBy: os.hostname()
-          });
+        const cached = await redis.get(seatsCacheKey);
+        if (cached) {
+          baseSeats = JSON.parse(cached);
+          res.set('X-Cache', 'HIT');
         }
-      } catch (dbErr) {
-        isDbReady = false;
+      } catch (e) {}
+    }
+
+    if (!baseSeats) {
+      if (!isDbReady) await checkDbConnection();
+
+      if (isDbReady) {
+        try {
+          const q = await pool.query(`
+            SELECT id, concert_id, seat_number, category, status, price
+            FROM seats
+            WHERE concert_id = $1 AND seat_number NOT LIKE 'FEST-%'
+            ORDER BY seat_number ASC
+          `, [concertId]);
+
+          if (q.rows.length > 0) {
+            baseSeats = q.rows.map((s) => ({
+              id: s.id,
+              seatNumber: s.seat_number,
+              category: s.category,
+              status: s.status,
+              price: parseFloat(s.price),
+            }));
+            if (isRedisReady) {
+              redis.set(seatsCacheKey, JSON.stringify(baseSeats), 'EX', SEATS_CACHE_TTL_SEC).catch(() => {});
+            }
+            res.set('X-Cache', 'MISS');
+          }
+        } catch (dbErr) {
+          isDbReady = false;
+        }
       }
+    }
+
+    if (baseSeats) {
+      const syncedSeats = await mergeRedisSeatLocks(concertId, baseSeats);
+      return res.json({
+        concertId,
+        seats: syncedSeats,
+        servedBy: os.hostname(),
+      });
     }
 
     return res.json({
       concertId,
       seats: await mergeRedisSeatLocks(concertId, buildFallbackSeats(concertId)),
-      servedBy: os.hostname()
+      servedBy: os.hostname(),
     });
   } catch (err) {
     return res.json({
       concertId,
       seats: await mergeRedisSeatLocks(concertId, buildFallbackSeats(concertId)),
-      servedBy: os.hostname()
+      servedBy: os.hostname(),
     });
   }
 });
@@ -517,11 +850,16 @@ async function releaseRedisCheckoutLock({
   redisClient = redis,
   stockKey,
   seatLockKey,
+  seatLockValue,
   stockDecremented,
   seatLockAcquired,
 }) {
   if (seatLockAcquired && seatLockKey) {
-    await redisClient.del(seatLockKey).catch(() => {});
+    if (seatLockValue && typeof redisClient.atomicUnlockSeat === 'function') {
+      await redisClient.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {});
+    } else {
+      await redisClient.del(seatLockKey).catch(() => {});
+    }
   }
   if (stockDecremented && stockKey) {
     await redisClient.incr(stockKey).catch(() => {});
@@ -534,6 +872,7 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
   const redisConcertKey = `concert:${parseInt(req.body?.concertId, 10) || 1}:stock`;
   let stockDecremented = false;
   let seatLockKey = null;
+  let seatLockValue = null;
   let seatLockAcquired = false;
 
   try {
@@ -544,8 +883,9 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     const concertId = parseInt(body.concertId, 10) || 1;
     let seatId = body.seatId ? parseInt(body.seatId, 10) : null;
     const requestedSeatNumber = body.seatNumber ? String(body.seatNumber).trim() : null;
+    const queueToken = body.queueToken ? String(body.queueToken).trim() : '';
 
-    // Check Redis resilience
+    // Check Redis & Database resilience before locking inventory
     if (!isRedisReady) {
       return res.status(503).json({
         success: false,
@@ -558,9 +898,19 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     }
 
     if (!isDbReady) await checkDbConnection();
+    if (!isDbReady) {
+      return res.status(503).json({
+        success: false,
+        degraded: true,
+        error: 'Database Reconnecting',
+        message: 'PostgreSQL sedang memulihkan koneksi. Silakan coba beberapa detik lagi.',
+        servedBy: os.hostname(),
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Resolusi seatId bila pemanggil hanya mengirim seatNumber (mis. uji konkurensi E-05)
-    if (!seatId && requestedSeatNumber && isDbReady) {
+    if (!seatId && requestedSeatNumber) {
       const lookupSeat = await pool.query(
         'SELECT id FROM seats WHERE concert_id = $1 AND seat_number = $2 LIMIT 1',
         [concertId, requestedSeatNumber]
@@ -583,10 +933,11 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     }
     stockDecremented = true;
 
-    // If a specific seat is targeted, atomically lock its key in Redis
+    // If a specific seat is targeted, atomically lock its key in Redis with ownership token
     if (seatId) {
       seatLockKey = `concert:${concertId}:seat:${seatId}:lock`;
-      const lockAcquired = await redis.atomicLockSeat(seatLockKey, String(userId), 300);
+      seatLockValue = `${userId}:${crypto.randomUUID()}`;
+      const lockAcquired = await redis.atomicLockSeat(seatLockKey, seatLockValue, 300);
       if (lockAcquired === 0) {
         await releaseRedisCheckoutLock({ stockKey: redisConcertKey, stockDecremented });
         stockDecremented = false;
@@ -610,103 +961,112 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     let buyerName = 'Penonton Terdaftar';
     let buyerEmail = 'user@wartiket.id';
 
-    if (isDbReady) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-        const userRes = await client.query('SELECT id, name, email, phone, id_card FROM users WHERE id = $1', [userId]);
-        const dbUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
-        if (userRes.rows.length > 0) {
-          buyerName = userRes.rows[0].name;
-          buyerEmail = userRes.rows[0].email;
-        }
-
-        const concertRes = await client.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]);
-        if (concertRes.rows.length > 0) {
-          concertTitle = concertRes.rows[0].title;
-          concertVenue = concertRes.rows[0].venue;
-          concertDate = concertRes.rows[0].concert_date;
-          ticketPrice = parseFloat(concertRes.rows[0].price);
-        }
-
-        // Seat selection & locking
-        let seatRecord;
-        if (seatId) {
-          const seatRes = await client.query(
-            `UPDATE seats 
-             SET status = 'Booked', locked_by = $1 
-             WHERE id = $2 AND concert_id = $3 AND status = 'Available' 
-             RETURNING id, seat_number, price`,
-            [dbUserId, seatId, concertId]
-          );
-          if (seatRes.rows.length > 0) {
-            seatRecord = seatRes.rows[0];
-          }
-        } else {
-          // Auto-assign next available seat (for k6 load testing or quick checkout)
-          const findSeatRes = await client.query(
-            `UPDATE seats 
-             SET status = 'Booked', locked_by = $1 
-             WHERE id = (
-               SELECT id FROM seats 
-               WHERE concert_id = $2 AND status = 'Available' 
-               ORDER BY id ASC 
-               LIMIT 1 
-               FOR UPDATE SKIP LOCKED
-             )
-             RETURNING id, seat_number, price`,
-            [dbUserId, concertId]
-          );
-          if (findSeatRes.rows.length > 0) {
-            seatRecord = findSeatRes.rows[0];
-            seatId = seatRecord.id;
-          }
-        }
-
-        if (!seatRecord) {
-          await client.query('ROLLBACK').catch(() => {});
-          await releaseRedisCheckoutLock({
-            stockKey: redisConcertKey,
-            seatLockKey,
-            stockDecremented,
-            seatLockAcquired,
-          });
-          stockDecremented = false;
-          seatLockAcquired = false;
-          return res.status(409).json({
-            success: false,
-            message: 'Maaf, kursi yang dipilih baru saja diamankan oleh orang lain di Database relasional.',
-            servedBy: os.hostname(),
-            timestamp: new Date().toISOString(),
-          });
-        }
-
-        bookedSeatNumber = seatRecord.seat_number;
-        ticketPrice = parseFloat(seatRecord.price);
-
-        await client.query(
-          `INSERT INTO transactions 
-           (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id) 
-           VALUES ($1, $2, $3, $4, $5, $6, 'COMPLETED', $7)`,
-          [orderId, dbUserId, concertId, seatId, bookedSeatNumber, ticketPrice, os.hostname()]
-        );
-
-        await client.query(
-          `UPDATE concerts 
-           SET available_seats = GREATEST(0, available_seats - 1) 
-           WHERE id = $1`,
-          [concertId]
-        );
-
-        await client.query('COMMIT');
-      } catch (dbErr) {
-        await client.query('ROLLBACK').catch(() => {});
-        console.error(`[DB Error during checkout]:`, dbErr.message);
-        throw dbErr;
-      } finally {
-        client.release();
+      const userRes = await client.query('SELECT id, name, email, phone, id_card FROM users WHERE id = $1', [userId]);
+      const dbUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
+      if (userRes.rows.length > 0) {
+        buyerName = userRes.rows[0].name;
+        buyerEmail = userRes.rows[0].email;
       }
+
+      const concertRes = await client.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]);
+      if (concertRes.rows.length > 0) {
+        concertTitle = concertRes.rows[0].title;
+        concertVenue = concertRes.rows[0].venue;
+        concertDate = concertRes.rows[0].concert_date;
+        ticketPrice = parseFloat(concertRes.rows[0].price);
+      }
+
+      // Seat selection & row-level locking
+      let seatRecord;
+      if (seatId) {
+        const seatRes = await client.query(
+          `UPDATE seats 
+           SET status = 'Booked', locked_by = $1 
+           WHERE id = $2 AND concert_id = $3 AND status = 'Available' 
+           RETURNING id, seat_number, price`,
+          [dbUserId, seatId, concertId]
+        );
+        if (seatRes.rows.length > 0) {
+          seatRecord = seatRes.rows[0];
+        }
+      } else {
+        // Auto-assign next available seat (for k6 load testing or quick checkout)
+        const findSeatRes = await client.query(
+          `UPDATE seats 
+           SET status = 'Booked', locked_by = $1 
+           WHERE id = (
+             SELECT id FROM seats 
+             WHERE concert_id = $2 AND status = 'Available' 
+             ORDER BY id ASC 
+             LIMIT 1 
+             FOR UPDATE SKIP LOCKED
+           )
+           RETURNING id, seat_number, price`,
+          [dbUserId, concertId]
+        );
+        if (findSeatRes.rows.length > 0) {
+          seatRecord = findSeatRes.rows[0];
+          seatId = seatRecord.id;
+        }
+      }
+
+      if (!seatRecord) {
+        await client.query('ROLLBACK').catch(() => {});
+        await releaseRedisCheckoutLock({
+          stockKey: redisConcertKey,
+          seatLockKey,
+          seatLockValue,
+          stockDecremented,
+          seatLockAcquired,
+        });
+        stockDecremented = false;
+        seatLockAcquired = false;
+        return res.status(409).json({
+          success: false,
+          message: 'Maaf, kursi yang dipilih baru saja diamankan oleh orang lain di Database relasional.',
+          servedBy: os.hostname(),
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      bookedSeatNumber = seatRecord.seat_number;
+      ticketPrice = parseFloat(seatRecord.price);
+
+      await client.query(
+        `INSERT INTO transactions 
+         (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, 'COMPLETED', $7)`,
+        [orderId, dbUserId, concertId, seatId, bookedSeatNumber, ticketPrice, os.hostname()]
+      );
+
+      await client.query(
+        `UPDATE concerts 
+         SET available_seats = GREATEST(0, available_seats - 1) 
+         WHERE id = $1`,
+        [concertId]
+      );
+
+      await client.query('COMMIT');
+    } catch (dbErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error(`[DB Error during checkout]:`, dbErr.message);
+      throw dbErr;
+    } finally {
+      client.release();
+    }
+
+    // Invalidate cached reads & release queue/lock cleanly after DB commit
+    await invalidateConcertCache(concertId);
+    if (seatLockAcquired && seatLockKey) {
+      await redis.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {});
+    }
+    if (queueToken) {
+      redis.zrem(QUEUE_ACTIVE_KEY, queueToken).catch(() => {});
+      redis.del(`queue:meta:${queueToken}`).catch(() => {});
     }
 
     // Step 3: Success Return E-Ticket
@@ -744,6 +1104,7 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
     await releaseRedisCheckoutLock({
       stockKey: redisConcertKey,
       seatLockKey,
+      seatLockValue,
       stockDecremented,
       seatLockAcquired,
     });
@@ -761,6 +1122,7 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
 // --- TRANSACTIONS LOG API ---
 app.get('/api/transactions', async (req, res) => {
   try {
+    if (!isDbReady) await checkDbConnection();
     if (isDbReady) {
       const q = await pool.query(`
         SELECT 
@@ -788,47 +1150,57 @@ app.get('/api/transactions', async (req, res) => {
 // --- RESET STOCK & REINITIALIZE (FOR LIVE DEMO & REPEATED LOAD TEST) ---
 app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
   try {
-    if (isRedisReady) {
-      await redis.set(TICKET_KEY, INITIAL_STOCK);
-      for (let cId = 1; cId <= 3; cId++) {
-        await redis.set(`concert:${cId}:stock`, 500);
-      }
-      // Flush Redis keys for seat locks
-      const keys = await redis.keys('concert:*:seat:*:lock');
-      if (keys.length > 0) {
-        await redis.del(...keys);
+    if (!isDbReady) await checkDbConnection();
+
+    let syncedStocks = {};
+    if (isDbReady) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("UPDATE seats SET status = 'Available', locked_by = NULL");
+        await client.query(`
+          UPDATE seats
+          SET status = 'Booked',
+              locked_by = CASE concert_id WHEN 1 THEN 4 WHEN 2 THEN 5 WHEN 3 THEN 4 END
+          WHERE (concert_id = 1 AND seat_number IN ('A-03', 'A-04', 'B-07', 'C-05'))
+             OR (concert_id = 2 AND seat_number IN ('A-01', 'B-05', 'C-08'))
+             OR (concert_id = 3 AND seat_number IN ('A-02', 'A-05', 'B-09'))
+        `);
+        const syncRes = await client.query(`
+          UPDATE concerts c
+          SET available_seats = (
+            SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id AND s.status = 'Available'
+          )
+          RETURNING id, available_seats
+        `);
+        for (const row of syncRes.rows) {
+          syncedStocks[row.id] = Number(row.available_seats);
+        }
+        await client.query('COMMIT');
+      } catch (dbErr) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw dbErr;
+      } finally {
+        client.release();
       }
     }
 
-    if (isDbReady) {
-      // Reset seats status to 'Available' except demo pre-booked seats
-      await pool.query(`
-        UPDATE seats 
-        SET status = 'Available', locked_by = NULL;
-      `);
-
-      // Pre-book demo seats
-      await pool.query(`
-        UPDATE seats SET status = 'Booked', locked_by = 4 WHERE concert_id = 1 AND seat_number IN ('A-03', 'A-04', 'B-07', 'C-05');
-        UPDATE seats SET status = 'Booked', locked_by = 5 WHERE concert_id = 2 AND seat_number IN ('A-01', 'B-05', 'C-08');
-        UPDATE seats SET status = 'Booked', locked_by = 4 WHERE concert_id = 3 AND seat_number IN ('A-02', 'A-05', 'B-09');
-      `);
-
-      // Sync concert available seats
-      await pool.query(`
-        UPDATE concerts c
-        SET available_seats = (
-            SELECT COUNT(*) 
-            FROM seats s 
-            WHERE s.concert_id = c.id AND s.status = 'Available'
-        );
-      `);
+    if (isRedisReady) {
+      await redis.set(TICKET_KEY, INITIAL_STOCK);
+      for (let cId = 1; cId <= 3; cId++) {
+        await redis.set(`concert:${cId}:stock`, syncedStocks[cId] ?? 500);
+      }
+      await scanAndDelete('concert:*:seat:*:lock');
+      await scanAndDelete('cache:*');
+      await scanAndDelete('queue:meta:*');
+      await redis.del(QUEUE_WAIT_KEY, QUEUE_ACTIVE_KEY, QUEUE_HB_KEY, QUEUE_SEQ_KEY).catch(() => {});
     }
 
     res.json({
       success: true,
       message: `Katalog tiket, denah kursi di Database, dan Redis Atomic Lock berhasil di-reset ke kondisi awal.`,
       stock: INITIAL_STOCK,
+      concertStocks: syncedStocks,
       servedBy: os.hostname(),
     });
   } catch (err) {
@@ -855,6 +1227,8 @@ module.exports = {
   app,
   BUY_LUA_SCRIPT,
   LOCK_SEAT_LUA_SCRIPT,
+  UNLOCK_SEAT_LUA_SCRIPT,
+  QUEUE_SYNC_LUA_SCRIPT,
   pool,
   redis,
   mergeRedisSeatLocks,

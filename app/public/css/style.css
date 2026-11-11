@@ -1125,7 +1125,7 @@ footer[id],
 }
 
 /* ==========================================================================
-   6. HEADER HALAMAN SUB-PAGE, CARA WAR, KONTAK & FOOTER
+   6. HEADER HALAMAN SUB-PAGE, KONTAK & FOOTER
    ========================================================================== */
 .page-hero-band {
   width: 1380px;
@@ -1167,108 +1167,6 @@ footer[id],
   color: #E8F2DC;
   max-width: 720px;
   margin: 0 auto;
-}
-
-.section-carawar {
-  background-color: var(--color-cream);
-  padding: 72px 0;
-}
-
-.section-guide-steps {
-  background-color: var(--color-mint);
-  margin-top: 32px;
-  padding: 72px 0;
-}
-
-.guide-steps-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 322px);
-  gap: 24px;
-}
-
-.guide-step-card {
-  background: var(--color-white);
-  padding: 26px;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-soft);
-}
-
-.guide-step-badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--color-mint);
-  color: var(--color-forest);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 800;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-
-.guide-step-title {
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 800;
-  color: var(--color-forest);
-  margin-bottom: 8px;
-}
-
-.guide-step-desc {
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--color-text-muted);
-}
-
-.guide-cta-bar {
-  margin-top: 44px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-}
-
-.carawar-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 440px);
-  gap: 30px;
-}
-
-.carawar-card {
-  background: var(--color-white);
-  padding: 28px;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-soft);
-}
-
-.carawar-num {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--color-mint);
-  color: var(--color-forest);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 19px;
-  margin-bottom: 14px;
-}
-
-.carawar-title {
-  font-weight: 800;
-  font-size: 19px;
-  line-height: 26px;
-  color: var(--color-forest);
-  margin-bottom: 8px;
-}
-
-.carawar-desc {
-  font-size: 15px;
-  line-height: 24px;
-  color: var(--color-text-muted);
 }
 
 .section-contact {
@@ -2167,6 +2065,154 @@ footer[id],
 }
 
 /* ==========================================================================
+   11a. VISUAL FEEDBACK: LOADING SPINNER & REAL-TIME QUEUE STATUS
+   ========================================================================== */
+@keyframes wt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ui-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(47, 93, 42, 0.22);
+  border-top-color: var(--color-forest);
+  border-radius: 50%;
+  animation: wt-spin 0.7s linear infinite;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.ui-spinner-light {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--color-white);
+}
+
+.ui-spinner-lg {
+  width: 34px;
+  height: 34px;
+  border-width: 3.5px;
+}
+
+.loading-inline-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.catalog-loading-state {
+  grid-column: 1 / -1;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.queue-status-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #eff6e8;
+  border: 1px solid rgba(47, 93, 42, 0.28);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-forest);
+  font-weight: 700;
+}
+
+.queue-status-bar.active {
+  display: flex;
+}
+
+.queue-status-bar.is-waiting {
+  background: #fefcbf;
+  border-color: #d69e2e;
+  color: #744210;
+}
+
+.queue-status-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.queue-status-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.queue-waiting-card {
+  background: var(--color-cream);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-inner);
+  padding: 28px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.queue-position-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-forest);
+  color: var(--color-white);
+  border-radius: var(--radius-pill);
+  padding: 6px 18px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.queue-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.queue-metric-box {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.queue-metric-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.queue-metric-val {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-forest);
+}
+
+/* ==========================================================================
    11b. RESPONSIVE MOBILE & TABLET SENTUH (TANPA MENGGANGGU ZOOM DESKTOP)
    ========================================================================== */
 body.is-mobile .scaled-overlay-root {
@@ -2201,11 +2247,14 @@ body.is-mobile .navbar-inner {
   border-radius: 20px;
   padding: 12px 14px;
   flex-wrap: wrap;
-  row-gap: 10px;
+  gap: 10px;
 }
 
 body.is-mobile .nav-brand {
-  max-width: 62%;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  gap: 10px;
 }
 
 body.is-mobile .brand-line-1 {
@@ -2229,13 +2278,23 @@ body.is-mobile .navbar nav {
 
 body.is-mobile .nav-menu {
   width: 100%;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: space-around;
+  gap: 6px;
 }
 
 body.is-mobile .nav-link {
   font-size: 14px;
   padding: 6px 4px;
+}
+
+body.is-mobile .nav-actions {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+body.is-mobile .btn-icon-search {
+  width: 38px;
+  height: 38px;
 }
 
 body.is-mobile .nav-actions .btn-pill-primary {
@@ -2257,12 +2316,22 @@ body.is-mobile .nav-search-form {
   padding: 12px;
 }
 
+body.is-mobile .autocomplete-dropdown {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+body.is-mobile .autocomplete-item > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 body.is-mobile .hero-card.container,
 body.is-mobile .page-hero-band.container {
   width: calc(100% - 32px);
   margin: 0 auto;
-  padding: 40px 20px;
-  min-height: 360px;
+  padding: 36px 18px;
+  min-height: 340px;
 }
 
 body.is-mobile .hero-inner,
@@ -2271,9 +2340,10 @@ body.is-mobile .section-header-centered {
 }
 
 body.is-mobile .hero-line {
-  font-size: 28px;
-  line-height: 35px;
+  font-size: 27px;
+  line-height: 34px;
   white-space: normal;
+  overflow-wrap: break-word;
 }
 
 body.is-mobile .hero-subtitle,
@@ -2284,28 +2354,26 @@ body.is-mobile .page-hero-subtitle {
 }
 
 body.is-mobile .page-hero-title {
-  font-size: 28px;
-  line-height: 35px;
+  font-size: 27px;
+  line-height: 34px;
+  overflow-wrap: break-word;
 }
 
 body.is-mobile .section-welcome,
 body.is-mobile .section-concerts,
-body.is-mobile .section-guide-steps,
-body.is-mobile .section-carawar,
 body.is-mobile .section-contact {
-  padding: 44px 0;
+  padding: 40px 0;
 }
 
 body.is-mobile .welcome-container,
-body.is-mobile .guide-steps-grid,
-body.is-mobile .carawar-grid,
 body.is-mobile .contact-grid,
 body.is-mobile .footer-inner,
 body.is-mobile .demo-accounts-grid,
 body.is-mobile .form-grid-2,
-body.is-mobile .eticket-grid {
+body.is-mobile .eticket-grid,
+body.is-mobile .queue-metrics-grid {
   grid-template-columns: 1fr;
-  gap: 18px;
+  gap: 16px;
 }
 
 body.is-mobile .polaroid-wrapper {
@@ -2334,12 +2402,44 @@ body.is-mobile .badge-circle-orange {
 
 body.is-mobile .welcome-title,
 body.is-mobile .section-title-centered {
-  font-size: 28px;
-  line-height: 35px;
+  font-size: 27px;
+  line-height: 34px;
+  overflow-wrap: break-word;
+}
+
+body.is-mobile .cloud-chip {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 body.is-mobile .carousel-viewport {
   width: 100%;
+}
+
+body.is-mobile .carousel-controls {
+  gap: 10px;
+  max-width: 100%;
+}
+
+body.is-mobile .carousel-arrow-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+}
+
+body.is-mobile .pagination-dots {
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+body.is-mobile .dot {
+  width: 8px;
+  height: 8px;
+}
+
+body.is-mobile .dot.active {
+  width: 22px;
 }
 
 body.is-mobile .carousel-page {
@@ -2349,16 +2449,21 @@ body.is-mobile .carousel-page {
   padding: 0;
 }
 
+body.is-mobile .card-footer {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 body.is-mobile .welcome-actions,
-body.is-mobile .guide-cta-bar,
 body.is-mobile .footer-bottom,
 body.is-mobile .modal-actions-row,
 body.is-mobile .search-summary-bar,
 body.is-mobile .eticket-header,
-body.is-mobile .eticket-note {
+body.is-mobile .eticket-note,
+body.is-mobile .queue-status-bar {
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
+  gap: 10px;
 }
 
 body.is-mobile .eticket-header-right {
@@ -2388,34 +2493,70 @@ body.is-mobile .multi-select-actions {
 body.is-mobile .modal-overlay {
   width: 100%;
   height: 100%;
-  padding: 14px;
+  padding: 12px;
 }
 
 body.is-mobile .modal-card,
 body.is-mobile .modal-card-sm {
   width: 100%;
   max-width: 100%;
-  padding: 22px 16px;
+  padding: 20px 14px;
+}
+
+body.is-mobile .modal-close-btn {
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
 }
 
 body.is-mobile .modal-steps-bar {
   padding: 0 38px 12px 0;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 body.is-mobile .modal-step-item {
   font-size: 13px;
 }
 
+body.is-mobile .modal-summary-row {
+  gap: 12px;
+}
+
+body.is-mobile .modal-summary-row strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 body.is-mobile .seat-grid-container {
   width: 100%;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
 }
 
 body.is-mobile .seat-btn {
   height: 40px;
   font-size: 11px;
+}
+
+@media (max-width: 360px) {
+  body.is-mobile .hero-line,
+  body.is-mobile .page-hero-title,
+  body.is-mobile .welcome-title {
+    font-size: 23px;
+    line-height: 29px;
+  }
+
+  body.is-mobile .seat-grid-container {
+    gap: 4px;
+  }
+
+  body.is-mobile .seat-btn {
+    height: 36px;
+    font-size: 10px;
+  }
 }
 
 body.is-mobile .toast-box {
@@ -2457,6 +2598,8 @@ body.is-mobile .toast-box {
   .no-print,
   .modal-close-btn,
   #warConcertTabs,
+  #warQueueStatusBar,
+  #phaseQueueWaiting,
   .modal-steps-bar,
   #phaseSeatSelection,
   #phaseDataDiri {

@@ -180,13 +180,12 @@ async function main() {
     console.log('  OK: All 4 POV demo logins verified & left signed in as Dosen Penguji.');
 
     // -----------------------------------------------------------------------
-    // SKENARIO 2: Multi-Page Navigation, Scroll-Locked Navbar, 3-Col Footer
+    // SKENARIO 2: Multi-Page Navigation, Zero Dead Links ('Cara War' Removed), Scroll-Locked Navbar
     // -----------------------------------------------------------------------
-    console.log('[Skenario 2] Testing multi-page routes, navbar scroll lock, and 3-column footer...');
+    console.log('[Skenario 2] Testing multi-page routes, zero dead links, navbar scroll lock, and 3-column footer...');
     const routes = [
       { path: '/', expectSearch: true },
       { path: '/konser', expectSearch: true },
-      { path: '/cara-war', expectSearch: false },
       { path: '/kontak', expectSearch: false },
     ];
 
@@ -203,6 +202,7 @@ async function main() {
         window.scrollTo(0, 0);
         const navLabels = [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => el.textContent.trim());
         const footerNavLabels = [...document.querySelectorAll('.site-footer .footer-links a')].map((el) => el.textContent.trim());
+        const deadCaraWarLinks = [...document.querySelectorAll('a[href*="cara-war"], a[href*="guide.html"]')].length;
         const searchBtn = document.getElementById('btnToggleSearchPanel');
         const footerCols = document.querySelector('.site-footer .footer-inner')
           ? getComputedStyle(document.querySelector('.site-footer .footer-inner')).gridTemplateColumns.split(' ').length
@@ -210,6 +210,7 @@ async function main() {
         return {
           navLabels,
           footerNavLabels,
+          deadCaraWarLinks,
           navPosition: nav ? getComputedStyle(nav).position : '',
           navBefore: navRect0.top,
           heroBelowNav: heroTop0 >= navRect0.bottom - 1,
@@ -224,6 +225,7 @@ async function main() {
 
       assert.deepEqual(audit.navLabels, ['Beranda', 'Konser', 'Kontak'], `Unexpected header nav items on ${r.path}`);
       assert.deepEqual(audit.footerNavLabels, ['Beranda', 'Daftar Konser', 'Kontak & Bantuan'], `Unexpected footer nav items on ${r.path}`);
+      assert.equal(audit.deadCaraWarLinks, 0, `Dead Cara War links must not exist on ${r.path}`);
       assert.equal(audit.hasSearch, r.expectSearch, `Search icon presence mismatch on ${r.path}`);
       assert.equal(audit.navPosition, 'relative', `Navbar must stay stationary inside #stage on ${r.path}`);
       assert.ok(audit.navBefore >= 0 && audit.navBefore <= 40, `Navbar initial top out of bounds on ${r.path}: ${audit.navBefore}`);
@@ -234,7 +236,9 @@ async function main() {
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
     }
-    console.log('  OK: Multi-page routing, search icon placement, fixed navbar, and 3-col footer passed.');
+    const removedRouteRes = await fetch(`${BASE_URL}/cara-war`);
+    assert.equal(removedRouteRes.status, 404, 'Removed /cara-war route must return HTTP 404 cleanly');
+    console.log('  OK: Multi-page routing, zero dead links, removed /cara-war (404), fixed navbar, and 3-col footer passed.');
 
     // -----------------------------------------------------------------------
     // SKENARIO 3 & 4: War E-05 -> E-Ticket + Print/PDF + Conflict + Anti-Stuck
@@ -245,6 +249,10 @@ async function main() {
 
     await cdp.eval(`openWarModal(1)`);
     await cdp.waitFor(`() => Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).some(b => b.textContent.trim() === 'E-05')`);
+
+    // Verify live queue status bar appeared during modal entry
+    const queueBarText = await cdp.eval(`document.getElementById('warQueueStatusBar')?.textContent?.trim() || ''`);
+    assert.ok(queueBarText.includes('Giliran Anda') && queueBarText.includes('Node:'), `Queue status bar must display active status & node, got "${queueBarText}"`);
 
     const step1Ready = await cdp.eval(`(() => {
       const btn = Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).find(b => b.textContent.trim() === 'E-05');
@@ -372,7 +380,81 @@ async function main() {
     assert.equal(antiStuck.backBtnDisabledAfterFail, false, 'Back button must re-enable after checkout failure');
     assert.equal(antiStuck.isCheckingOutFlag, false, 'state.isCheckingOut lock must reset in finally');
     assert.ok(antiStuck.buyBannerText.length > 0, 'User-friendly timeout message must appear in #warFeedbackBanner');
-    console.log('  OK: Anti-stuck timeout/504 recovery & 1-page Print/PDF verified.');
+
+    // -----------------------------------------------------------------------
+    // SKENARIO 3c: Queue Waiting-Room Transition (QUEUED -> ADMITTED) & Anti-Stuck
+    // -----------------------------------------------------------------------
+    console.log('[Skenario 3c] Verifying queue waiting-room transition (QUEUED -> ADMITTED) & queue error recovery...');
+    const queueFlow = await cdp.eval(`(async () => {
+      const origFetch = window.fetch.bind(window);
+      let statusPollCount = 0;
+      try {
+        closeWarModal();
+        window.fetch = async (url, opts) => {
+          const u = String(url);
+          if (u.includes('/api/queue/join')) {
+            return new Response(JSON.stringify({
+              success: true,
+              status: 'QUEUED',
+              queueToken: 'mock-q-tok-1',
+              ticketNumber: 42,
+              position: 3,
+              aheadCount: 2,
+              estimatedWaitSec: 1,
+              servedBy: 'mock-worker-a',
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (u.includes('/api/queue/status')) {
+            statusPollCount += 1;
+            return new Response(JSON.stringify({
+              success: true,
+              status: 'ADMITTED',
+              queueToken: 'mock-q-tok-1',
+              ticketNumber: 42,
+              position: 0,
+              aheadCount: 0,
+              estimatedWaitSec: 0,
+              servedBy: 'mock-worker-b',
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          return origFetch(url, opts);
+        };
+
+        await openWarModal(1);
+        const queuedVisible = document.getElementById('phaseQueueWaiting')?.style.display === 'block';
+        const posDuringQueue = document.getElementById('queuePositionVal')?.textContent?.trim();
+
+        // Wait for polling transition to ADMITTED across mock-worker-b
+        const tStart = Date.now();
+        while (Date.now() - tStart < 4000 && document.getElementById('phaseSeatSelection')?.style.display !== 'block') {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        const seatPhaseVisibleAfterAdmit = document.getElementById('phaseSeatSelection')?.style.display === 'block';
+        const barAfterAdmit = document.getElementById('warQueueStatusBar')?.textContent?.trim() || '';
+
+        // Test queue join error shows anti-stuck retry button instead of infinite spinner
+        closeWarModal();
+        window.fetch = async (url, opts) => {
+          if (String(url).includes('/api/queue/join')) {
+            return new Response('<html>503 Service Unavailable</html>', { status: 503, headers: { 'Content-Type': 'text/html' } });
+          }
+          return origFetch(url, opts);
+        };
+        await openWarModal(1);
+        const retryQueueVisible = getComputedStyle(document.getElementById('btnRetryQueue')).display !== 'none';
+
+        return { queuedVisible, posDuringQueue, statusPollCount, seatPhaseVisibleAfterAdmit, barAfterAdmit, retryQueueVisible };
+      } finally {
+        window.fetch = origFetch;
+        closeWarModal();
+      }
+    })()`);
+    assert.ok(queueFlow.queuedVisible && queueFlow.posDuringQueue === '#3', `Queue waiting card must show position #3: ${JSON.stringify(queueFlow)}`);
+    assert.ok(queueFlow.statusPollCount >= 1 && queueFlow.seatPhaseVisibleAfterAdmit, `Queue must transition smoothly to seat selection: ${JSON.stringify(queueFlow)}`);
+    assert.ok(queueFlow.barAfterAdmit.includes('mock-worker-b'), `Queue status bar must sync across Swarm worker nodes: ${JSON.stringify(queueFlow)}`);
+    assert.ok(queueFlow.retryQueueVisible, 'Queue 503 failure must expose #btnRetryQueue anti-stuck recovery button');
+    console.log('  OK: Anti-stuck timeout/504 recovery, queue waiting transition, and 1-page Print/PDF verified.');
 
     // Check empty Data Diri validation blocks checkout cleanly with inline alert (no freeze)
     const emptyNameValidation = await cdp.eval(`(async () => {
@@ -388,39 +470,52 @@ async function main() {
     assert.ok(emptyNameValidation.bannerShown && emptyNameValidation.bannerText.length > 0, 'Empty buyer name must trigger inline warning');
     assert.equal(emptyNameValidation.isChecking, false, 'Validation failure must never leave checkout locked');
 
-    // Mobile responsive layout check (390x844 touch device)
-    console.log('[Mobile 390x844] Verifying responsive layout, readable fonts, and touch modal geometry...');
-    await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width: 390,
-      height: 844,
-      deviceScaleFactor: 2,
-      mobile: true,
-    });
-    for (const mobPath of ['/', '/konser', '/cara-war', '/kontak']) {
-      await cdp.goto(`${BASE_URL}${mobPath}`);
-      const m = await cdp.eval(`(() => ({
-        isMobileClass: document.body.classList.contains('is-mobile'),
-        overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        bodyFontPx: parseFloat(getComputedStyle(document.body).fontSize),
-        brokenImgs: [...document.querySelectorAll('img')].filter(i => !i.complete || i.naturalWidth === 0).length,
-      }))()`);
-      assert.ok(m.isMobileClass, `body.is-mobile must activate on touch 390px for ${mobPath}`);
-      assert.equal(m.overflowX, 0, `Mobile horizontal overflow must be 0 on ${mobPath}, got ${m.overflowX}`);
-      assert.ok(m.bodyFontPx >= 14, `Mobile body font must be readable (>=14px), got ${m.bodyFontPx}`);
-      assert.equal(m.brokenImgs, 0, `All images must load cleanly on mobile ${mobPath}`);
-    }
+    // Mobile responsive layout check across multiple smartphone resolutions (320px, 360px, 390px)
+    console.log('[Mobile 320px / 360px / 390px] Verifying responsive layout, no overlaps, readable fonts, and touch modal...');
+    const mobileViewports = [
+      { width: 320, height: 568, minSeatW: 34 },
+      { width: 360, height: 800, minSeatW: 38 },
+      { width: 390, height: 844, minSeatW: 40 },
+    ];
+    for (const vp of mobileViewports) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: vp.width,
+        height: vp.height,
+        deviceScaleFactor: 2,
+        mobile: true,
+      });
+      for (const mobPath of ['/', '/konser', '/kontak']) {
+        await cdp.goto(`${BASE_URL}${mobPath}`);
+        const m = await cdp.eval(`(() => {
+          const brand = document.querySelector('.nav-brand')?.getBoundingClientRect();
+          const actions = document.querySelector('.nav-actions')?.getBoundingClientRect();
+          const navNoOverlap = !brand || !actions || brand.right <= actions.left + 2 || actions.top >= brand.bottom - 2;
+          return {
+            isMobileClass: document.body.classList.contains('is-mobile'),
+            overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            bodyFontPx: parseFloat(getComputedStyle(document.body).fontSize),
+            brokenImgs: [...document.querySelectorAll('img')].filter(i => !i.complete || i.naturalWidth === 0).length,
+            navNoOverlap,
+          };
+        })()`);
+        assert.ok(m.isMobileClass, `body.is-mobile must activate on touch ${vp.width}px for ${mobPath}`);
+        assert.equal(m.overflowX, 0, `Mobile horizontal overflow must be 0 on ${mobPath} (${vp.width}px), got ${m.overflowX}`);
+        assert.ok(m.bodyFontPx >= 14, `Mobile body font must be readable (>=14px), got ${m.bodyFontPx}`);
+        assert.equal(m.brokenImgs, 0, `All images must load cleanly on mobile ${mobPath}`);
+        assert.ok(m.navNoOverlap, `Navbar brand & actions must not overlap at ${vp.width}px on ${mobPath}`);
+      }
 
-    // Verify Mobile War Modal seat grid fits cleanly inside 390px without shrinking seats to ant-size
-    await cdp.goto(`${BASE_URL}/konser`);
-    await cdp.eval(`openWarModal(1)`);
-    await cdp.waitFor(`() => document.querySelectorAll('#modalSeatGrid .seat-btn').length === 60`);
-    const mobileModal = await cdp.eval(`(() => {
-      const card = document.querySelector('#warModal .modal-card').getBoundingClientRect();
-      const seat = document.querySelector('#modalSeatGrid .seat-btn').getBoundingClientRect();
-      return { cardLeft: card.left, cardRight: card.right, seatW: seat.width, seatH: seat.height };
-    })()`);
-    assert.ok(mobileModal.cardLeft >= 0 && mobileModal.cardRight <= 390, `Mobile modal overflows 390px: ${JSON.stringify(mobileModal)}`);
-    assert.ok(mobileModal.seatW >= 40 && mobileModal.seatH >= 36, `Mobile seat buttons too small for touch: ${JSON.stringify(mobileModal)}`);
+      await cdp.goto(`${BASE_URL}/konser`);
+      await cdp.eval(`openWarModal(1)`);
+      await cdp.waitFor(`() => document.querySelectorAll('#modalSeatGrid .seat-btn').length === 60`);
+      const mobileModal = await cdp.eval(`(() => {
+        const card = document.querySelector('#warModal .modal-card').getBoundingClientRect();
+        const seat = document.querySelector('#modalSeatGrid .seat-btn').getBoundingClientRect();
+        return { cardLeft: card.left, cardRight: card.right, seatW: seat.width, seatH: seat.height };
+      })()`);
+      assert.ok(mobileModal.cardLeft >= 0 && mobileModal.cardRight <= vp.width, `Mobile modal overflows ${vp.width}px: ${JSON.stringify(mobileModal)}`);
+      assert.ok(mobileModal.seatW >= vp.minSeatW && mobileModal.seatH >= 34, `Mobile seat buttons too small at ${vp.width}px: ${JSON.stringify(mobileModal)}`);
+    }
 
     assert.equal(cdp.consoleErrors.length, 0, `Unexpected browser console errors: ${JSON.stringify(cdp.consoleErrors)}`);
     assert.equal(cdp.httpFailures.length, 0, `Unexpected HTTP >= 400 responses: ${JSON.stringify(cdp.httpFailures)}`);

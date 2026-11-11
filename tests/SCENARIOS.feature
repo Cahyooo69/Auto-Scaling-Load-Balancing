@@ -25,7 +25,8 @@ Fitur: Pengujian End-to-End, Stabilitas Anti-Stuck, dan Konkurensi Sistem War Ti
     Dengan pengguna membuka "/"
     Ketika pengguna memverifikasi top navbar ".navbar"
     Maka ikon pencarian "#btnToggleSearchPanel" terlihat di sebelah tombol "Masuk" pada "/" dan "/konser"
-    Tetapi ikon pencarian "#btnToggleSearchPanel" tidak dirender pada "/cara-war" dan "/kontak"
+    Tetapi ikon pencarian "#btnToggleSearchPanel" tidak dirender pada "/kontak"
+    Dan tidak ada tautan "/cara-war" atau "/guide.html" pada halaman mana pun serta akses "/cara-war" mengembalikan HTTP 404
     Ketika pengguna menggulir halaman sejauh 600px ke bawah
     Maka posisi ".navbar" ("position: relative" di dalam "#stage") tetap berada di puncak dokumen dan tidak ikut turun menutupi konten saat di-scroll
     Dan footer ".site-footer .footer-inner" tersusun dalam 3 kolom sejajar pada desktop (1440px)

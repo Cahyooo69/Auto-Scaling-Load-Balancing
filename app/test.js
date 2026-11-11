@@ -2,6 +2,8 @@ const assert = require('assert');
 const {
   BUY_LUA_SCRIPT,
   LOCK_SEAT_LUA_SCRIPT,
+  UNLOCK_SEAT_LUA_SCRIPT,
+  QUEUE_SYNC_LUA_SCRIPT,
   mergeRedisSeatLocks,
   releaseRedisCheckoutLock,
 } = require('./server');
@@ -113,6 +115,42 @@ async function testRedisLockHelpers() {
     seatLockAcquired: false,
   });
   assert.strictEqual(selectiveCalls.length, 0);
+
+  // 5. Ownership-checked Lua unlock script is used when seatLockValue & atomicUnlockSeat exist
+  const unlockCalls = [];
+  const mockUnlockRedis = {
+    atomicUnlockSeat: async (key, val) => { unlockCalls.push(['atomicUnlockSeat', key, val]); return 1; },
+    del: async (key) => { unlockCalls.push(['del', key]); return 1; },
+    incr: async (key) => { unlockCalls.push(['incr', key]); return 1; },
+  };
+  await releaseRedisCheckoutLock({
+    redisClient: mockUnlockRedis,
+    stockKey: 'concert:1:stock',
+    seatLockKey: 'concert:1:seat:105:lock',
+    seatLockValue: '4:tok-1',
+    stockDecremented: true,
+    seatLockAcquired: true,
+  });
+  assert.deepStrictEqual(unlockCalls, [
+    ['atomicUnlockSeat', 'concert:1:seat:105:lock', '4:tok-1'],
+    ['incr', 'concert:1:stock'],
+  ]);
+
+  // 6. Verify UNLOCK_SEAT_LUA_SCRIPT & QUEUE_SYNC_LUA_SCRIPT invariants
+  assert(
+    typeof UNLOCK_SEAT_LUA_SCRIPT === 'string' &&
+      UNLOCK_SEAT_LUA_SCRIPT.includes("redis.call('GET', KEYS[1]) == ARGV[1]") &&
+      UNLOCK_SEAT_LUA_SCRIPT.includes("redis.call('DEL', KEYS[1])"),
+    'UNLOCK_SEAT_LUA_SCRIPT must verify lock ownership before DEL'
+  );
+  assert(
+    typeof QUEUE_SYNC_LUA_SCRIPT === 'string' &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ZREMRANGEBYSCORE') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ZPOPMIN') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ADMITTED') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('QUEUED'),
+    'QUEUE_SYNC_LUA_SCRIPT must evict stale entries and promote FIFO waiters atomically'
+  );
 }
 
 (async () => {

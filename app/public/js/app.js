@@ -17,9 +17,10 @@ function isMobileViewport() {
   if (typeof window === 'undefined') return false;
   const cw = document.documentElement.clientWidth;
   const sw = window.screen?.width || cw;
+  const ow = window.outerWidth || sw;
   const isTouchPrimary = Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)').matches);
-  const isSmallDeviceScreen = sw > 0 && sw <= 768 && cw <= 768;
-  return (isTouchPrimary && cw <= 1024) || isSmallDeviceScreen;
+  const isNarrowWindow = cw <= 768 && (sw <= 768 || ow <= 820);
+  return (isTouchPrimary && cw <= 1024) || isNarrowWindow;
 }
 
 function fit() {
@@ -232,6 +233,10 @@ const state = {
   seats: [],
   selectedSeat: null,
 
+  queueToken: null,
+  queueTicketNumber: null,
+  queueStatus: null,
+
   isLoggingIn: false,
   isCheckingOut: false,
   isResetting: false,
@@ -402,6 +407,16 @@ async function pollHealth() {
 // ============================================================================
 
 async function fetchConcerts() {
+  const track = document.getElementById('carouselTrack');
+  if (track && state.allConcerts.length === 0) {
+    track.innerHTML = `
+      <div class="catalog-loading-state">
+        <span class="ui-spinner ui-spinner-lg"></span>
+        <span>Memuat jadwal konser terbaru...</span>
+      </div>
+    `;
+  }
+
   let dbConcerts = [];
   try {
     const { res, data } = await fetchJsonWithTimeout('/api/concerts', { cache: 'no-store' }, 6000);
@@ -973,7 +988,6 @@ function handleAuthNavClick() {
 function getCurrentRouteKey() {
   const path = (window.location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
   if (path === '/konser' || path === '/concerts.html') return 'konser';
-  if (path === '/cara-war' || path === '/guide.html') return 'cara-war';
   if (path === '/kontak' || path === '/contact.html') return 'kontak';
   return 'beranda';
 }
@@ -1108,7 +1122,7 @@ async function handleLogin(e) {
   state.isLoggingIn = true;
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span>Memverifikasi akun...</span>';
+    submitBtn.innerHTML = '<span class="ui-spinner ui-spinner-light"></span><span>Memverifikasi akun...</span>';
   }
 
   try {
@@ -1158,6 +1172,7 @@ function handleLogout() {
   try {
     sessionStorage.removeItem('wartiket_user');
   } catch (e) {}
+  fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
   updateAuthUI();
   closeNavAccountDropdown();
   closeWarModal();
@@ -1171,6 +1186,193 @@ function handleLogout() {
 let seatFetchController = null;
 let seatFetchRequestId = 0;
 let checkoutAbortController = null;
+let queueAbortController = null;
+let queuePollTimer = null;
+let queuePollErrors = 0;
+
+function stopQueuePolling() {
+  if (queuePollTimer) {
+    clearTimeout(queuePollTimer);
+    queuePollTimer = null;
+  }
+  if (queueAbortController) {
+    queueAbortController.abort();
+    queueAbortController = null;
+  }
+}
+
+function leaveWarQueue() {
+  const token = state.queueToken;
+  state.queueToken = null;
+  state.queueStatus = null;
+  state.queueTicketNumber = null;
+  if (!token) return;
+  fetch('/api/queue/leave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ queueToken: token }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function renderQueueStatus(q) {
+  const bar = document.getElementById('warQueueStatusBar');
+  const ticketBadge = document.getElementById('queueTicketBadge');
+  const posEl = document.getElementById('queuePositionVal');
+  const aheadEl = document.getElementById('queueAheadVal');
+  const etaEl = document.getElementById('queueEtaVal');
+  const nodeEl = document.getElementById('queueNodeVal');
+
+  if (q && q.queueToken) {
+    state.queueToken = q.queueToken;
+    state.queueTicketNumber = q.ticketNumber || state.queueTicketNumber;
+    state.queueStatus = q.status;
+  }
+
+  if (bar && q) {
+    const ticketLabel = q.ticketNumber ? `#${q.ticketNumber}` : 'Aktif';
+    const isQueued = q.status === 'QUEUED';
+    bar.classList.add('active');
+    bar.classList.toggle('is-waiting', isQueued);
+    bar.innerHTML = `
+      <span class="queue-status-left">
+        <span class="${isQueued ? 'ui-spinner' : 'dot-online'}"></span>
+        <span>${isQueued ? `Dalam Antrean (Tiket ${ticketLabel})` : `Giliran Anda (${ticketLabel}) • Silakan Pilih Kursi`}</span>
+      </span>
+      <span class="queue-status-meta">Node: ${escapeHtml(q.servedBy || state.lastWorkerHost)}</span>
+    `;
+  } else if (bar) {
+    bar.classList.remove('active', 'is-waiting');
+    bar.innerHTML = '';
+  }
+
+  if (q) {
+    if (ticketBadge) ticketBadge.textContent = `Nomor Antrean #${q.ticketNumber || 1}`;
+    if (posEl) posEl.textContent = q.status === 'QUEUED' ? `#${q.position}` : 'AKTIF';
+    if (aheadEl) aheadEl.textContent = String(q.aheadCount ?? 0);
+    if (etaEl) etaEl.textContent = q.estimatedWaitSec ? `~${q.estimatedWaitSec}s` : 'Siap';
+    if (nodeEl) nodeEl.textContent = q.servedBy || state.lastWorkerHost;
+  }
+}
+
+function scheduleQueuePoll() {
+  if (queuePollTimer) clearTimeout(queuePollTimer);
+  queuePollTimer = setTimeout(pollWarQueueStatus, 1000);
+}
+
+async function pollWarQueueStatus() {
+  const modalActive = document.getElementById('warModal')?.classList.contains('active');
+  if (!modalActive || !state.queueToken || state.queueStatus !== 'QUEUED') return;
+
+  if (queueAbortController) queueAbortController.abort();
+  queueAbortController = new AbortController();
+
+  try {
+    const { res, data } = await fetchJsonWithTimeout(
+      `/api/queue/status?token=${encodeURIComponent(state.queueToken)}`,
+      { cache: 'no-store', signal: queueAbortController.signal },
+      5000
+    );
+
+    if (res.status === 410 || data.status === 'EXPIRED') {
+      queuePollErrors = 0;
+      state.queueStatus = 'EXPIRED';
+      showWarFeedback(data.message || 'Sesi antrean berakhir. Klik "Masuk Antrean Ulang" untuk melanjutkan.');
+      document.getElementById('btnRetryQueue').style.display = 'inline-flex';
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(data.message || `Gagal menyinkronkan antrean (HTTP ${res.status}).`);
+    }
+
+    queuePollErrors = 0;
+    clearWarFeedback();
+    renderQueueStatus(data);
+
+    if (data.status === 'ADMITTED') {
+      stopQueuePolling();
+      await switchWarConcert(state.activeWarConcertId);
+      return;
+    }
+
+    scheduleQueuePoll();
+  } catch (err) {
+    if (err.isExternalAbort) return;
+    queuePollErrors += 1;
+    if (queuePollErrors >= 3) {
+      showWarFeedback(err.message || 'Koneksi antrean terputus. Klik "Masuk Antrean Ulang" agar tidak stuck.');
+      const retryBtn = document.getElementById('btnRetryQueue');
+      if (retryBtn) retryBtn.style.display = 'inline-flex';
+      return;
+    }
+    scheduleQueuePoll();
+  }
+}
+
+async function joinAndEnterWarQueue(concertId) {
+  stopQueuePolling();
+  queuePollErrors = 0;
+  state.activeWarConcertId = concertId;
+  state.selectedSeat = null;
+  state.selectedConcert = state.allConcerts.find((c) => c.id === concertId) || state.allConcerts[0] || {
+    id: concertId,
+    title: 'Konser Pilihan',
+    venue: 'Jakarta',
+    price: 1500000,
+  };
+
+  renderWarConcertTabs();
+  setWarStep(1);
+  clearWarFeedback();
+
+  const waitPhase = document.getElementById('phaseQueueWaiting');
+  const seatPhase = document.getElementById('phaseSeatSelection');
+  const dataPhase = document.getElementById('phaseDataDiri');
+  const ticketPhase = document.getElementById('phaseETicket');
+  const retryBtn = document.getElementById('btnRetryQueue');
+  const waitTitle = document.getElementById('queueWaitingTitle');
+
+  if (waitPhase) waitPhase.style.display = 'block';
+  if (seatPhase) seatPhase.style.display = 'none';
+  if (dataPhase) dataPhase.style.display = 'none';
+  if (ticketPhase) ticketPhase.style.display = 'none';
+  if (retryBtn) retryBtn.style.display = 'none';
+  if (waitTitle) waitTitle.textContent = 'Menghubungkan ke Antrean Real-Time...';
+
+  queueAbortController = new AbortController();
+  try {
+    const { res, data } = await fetchJsonWithTimeout(
+      '/api/queue/join',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: state.currentUser?.id || 1, concertId }),
+        signal: queueAbortController.signal,
+      },
+      6000
+    );
+
+    if (!res.ok) {
+      throw new Error(data.message || `Antrean sedang padat (HTTP ${res.status}).`);
+    }
+
+    renderQueueStatus(data);
+
+    if (data.status === 'ADMITTED') {
+      await switchWarConcert(concertId);
+      return;
+    }
+
+    if (waitTitle) waitTitle.textContent = 'Anda Berada di Ruang Antrean Resmi';
+    scheduleQueuePoll();
+  } catch (err) {
+    if (err.isExternalAbort) return;
+    if (waitTitle) waitTitle.textContent = 'Koneksi Antrean Terganggu';
+    showWarFeedback(err.message || 'Gagal masuk antrean. Klik "Masuk Antrean Ulang".');
+    if (retryBtn) retryBtn.style.display = 'inline-flex';
+  }
+}
 
 function setWarStep(stepNumber) {
   [1, 2, 3].forEach((n) => {
@@ -1201,7 +1403,7 @@ async function openWarModal(concertIdsOrId) {
   state.isCheckingOut = false;
   clearWarFeedback();
   document.getElementById('warModal')?.classList.add('active');
-  await switchWarConcert(ids[0]);
+  await joinAndEnterWarQueue(ids[0]);
 }
 
 async function switchWarConcert(concertId) {
@@ -1225,6 +1427,8 @@ async function switchWarConcert(concertId) {
   if (titleEl) titleEl.textContent = state.selectedConcert.title;
   if (venueEl) venueEl.textContent = state.selectedConcert.venue;
 
+  const waitPhase = document.getElementById('phaseQueueWaiting');
+  if (waitPhase) waitPhase.style.display = 'none';
   document.getElementById('phaseSeatSelection').style.display = 'block';
   document.getElementById('phaseDataDiri').style.display = 'none';
   document.getElementById('phaseETicket').style.display = 'none';
@@ -1254,6 +1458,9 @@ function renderWarConcertTabs() {
 }
 
 function closeWarModal() {
+  stopQueuePolling();
+  leaveWarQueue();
+  renderQueueStatus(null);
   if (seatFetchController) {
     seatFetchController.abort();
     seatFetchController = null;
@@ -1263,6 +1470,10 @@ function closeWarModal() {
     checkoutAbortController = null;
   }
   state.isCheckingOut = false;
+  state.seats = [];
+  state.selectedSeat = null;
+  const grid = document.getElementById('modalSeatGrid');
+  if (grid) grid.innerHTML = '';
   clearWarFeedback();
   document.getElementById('warModal')?.classList.remove('active');
 }
@@ -1278,7 +1489,12 @@ async function loadSeats(concertId) {
   seatFetchController = new AbortController();
   const reqId = ++seatFetchRequestId;
 
-  grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--color-text-muted);">Memuat denah kursi real-time...</div>';
+  grid.innerHTML = `
+    <div class="loading-inline-row" style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--color-text-muted);">
+      <span class="ui-spinner"></span>
+      <span>Memuat denah kursi real-time...</span>
+    </div>
+  `;
 
   try {
     const { res, data } = await fetchJsonWithTimeout(
@@ -1427,7 +1643,7 @@ async function executeCheckout() {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span>Mengunci kursi &amp; memproses transaksi...</span>';
+    btn.innerHTML = '<span class="ui-spinner ui-spinner-light"></span><span>Mengunci kursi &amp; memproses transaksi...</span>';
   }
   if (backBtn) backBtn.disabled = true;
 
@@ -1467,6 +1683,7 @@ async function executeCheckout() {
       concertId: state.activeWarConcertId,
       seatId: state.selectedSeat?.id || null,
       seatNumber: state.selectedSeat?.seatNumber || null,
+      queueToken: state.queueToken || null,
     };
 
     const { res, data } = await fetchJsonWithTimeout(
@@ -1496,6 +1713,8 @@ async function executeCheckout() {
     }
 
     displayETicket(data.ticket, data.servedBy);
+    state.queueToken = null;
+    state.queueStatus = null;
     showToast('Pembayaran Lunas! E-Ticket resmi telah terbit.');
     fetchConcerts();
   } catch (err) {
@@ -1646,7 +1865,40 @@ function ensureSharedModals() {
           <div id="modalStep2" class="modal-step-item">2. Data Diri</div>
           <div id="modalStep3" class="modal-step-item">3. E-Ticket</div>
         </div>
+        <div id="warQueueStatusBar" class="queue-status-bar no-print" role="status" aria-live="polite"></div>
         <div id="warFeedbackBanner" class="modal-notice-banner no-print" role="alert" aria-live="assertive"></div>
+
+        <div id="phaseQueueWaiting" style="display: none;">
+          <div class="queue-waiting-card">
+            <span class="ui-spinner ui-spinner-lg"></span>
+            <h3 id="queueWaitingTitle" class="modal-title" style="font-size: 20px; line-height: 26px;">Menghubungkan ke Antrean Real-Time...</h3>
+            <span id="queueTicketBadge" class="queue-position-badge">Nomor Antrean #-</span>
+            <p class="modal-subtitle">Status tersinkronisasi di seluruh worker server. Halaman akan otomatis masuk ke peta kursi saat giliran Anda tiba.</p>
+            <div class="queue-metrics-grid">
+              <div class="queue-metric-box">
+                <span class="queue-metric-label">Posisi Antrean</span>
+                <span id="queuePositionVal" class="queue-metric-val">-</span>
+              </div>
+              <div class="queue-metric-box">
+                <span class="queue-metric-label">Di Depan Anda</span>
+                <span id="queueAheadVal" class="queue-metric-val">-</span>
+              </div>
+              <div class="queue-metric-box">
+                <span class="queue-metric-label">Estimasi Tunggu</span>
+                <span id="queueEtaVal" class="queue-metric-val">-</span>
+              </div>
+            </div>
+            <div style="font-size: 12px; color: var(--color-text-muted);">Worker Node: <strong id="queueNodeVal" class="font-mono">-</strong></div>
+            <div class="modal-actions-row" style="width: 100%; margin-top: 8px; justify-content: center;">
+              <button type="button" id="btnRetryQueue" class="btn-pill-primary" style="display: none;" onclick="joinAndEnterWarQueue(state.activeWarConcertId)">
+                <span>Masuk Antrean Ulang</span>
+              </button>
+              <button type="button" class="btn-pill-outline btn-pill-outline-dark" onclick="closeWarModal()">
+                <span>Keluar Antrean</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div id="phaseSeatSelection">
           <div style="margin-bottom: 16px;">
@@ -1657,7 +1909,7 @@ function ensureSharedModals() {
           <div class="seat-stage-banner">PANGGUNG / STAGE UTAMA</div>
           <div id="modalSeatGrid" class="seat-grid-container"></div>
 
-          <div class="modal-summary-box" style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="modal-summary-box" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <span class="demo-accounts-title" style="color: var(--color-text-muted); margin-bottom: 2px;">Kursi Terpilih</span>
               <span id="labelChosenSeat" style="font-weight: 800; color: var(--color-forest); font-size: 18px;">Belum Memilih</span>
@@ -1825,11 +2077,28 @@ function initGlobalOverlayHandlers() {
   });
 }
 
+async function syncSharedSession() {
+  if (!state.currentUser) return;
+  try {
+    const res = await fetch('/api/auth/session', { cache: 'no-store' });
+    if (res.status === 401) return;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        state.currentUser = data.user;
+        sessionStorage.setItem('wartiket_user', JSON.stringify(data.user));
+        updateAuthUI();
+      }
+    }
+  } catch (e) {}
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   ensureSharedModals();
   fit();
   syncActiveNavByRoute();
   updateAuthUI();
+  syncSharedSession();
   renderMultiSelectBar();
   pollHealth();
   setInterval(pollHealth, 5000);
