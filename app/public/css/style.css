@@ -1176,9 +1176,9 @@ footer[id],
 
 .contact-grid {
   display: grid;
-  grid-template-columns: 560px 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 32px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .contact-card {
@@ -1187,14 +1187,17 @@ footer[id],
   border-radius: var(--radius-card);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
 }
 
 .contact-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   margin-top: 18px;
+  flex: 1;
 }
 
 .contact-list-item {
@@ -1204,7 +1207,9 @@ footer[id],
   padding: 14px 18px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 4px;
+  flex: 1;
 }
 
 .contact-faq-list {
@@ -1212,6 +1217,7 @@ footer[id],
   flex-direction: column;
   gap: 14px;
   margin-top: 18px;
+  flex: 1;
 }
 
 .contact-faq-item {
@@ -1219,6 +1225,7 @@ footer[id],
   border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 16px 20px;
+  flex: 1;
 }
 
 .contact-faq-q {

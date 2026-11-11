@@ -236,6 +236,19 @@ async function main() {
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
     }
+    const contactCardCheck = await cdp.eval(`(() => {
+      const cards = [...document.querySelectorAll('.contact-card')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      return cards;
+    })()`);
+    assert.equal(contactCardCheck.length, 2, 'Contact page must render 2 contact cards');
+    assert.ok(
+      Math.abs(contactCardCheck[0].w - contactCardCheck[1].w) <= 2 &&
+        Math.abs(contactCardCheck[0].h - contactCardCheck[1].h) <= 2,
+      `Contact & FAQ cards must share equal size on desktop: ${JSON.stringify(contactCardCheck)}`
+    );
     const removedRouteRes = await fetch(`${BASE_URL}/cara-war`);
     assert.equal(removedRouteRes.status, 404, 'Removed /cara-war route must return HTTP 404 cleanly');
     console.log('  OK: Multi-page routing, zero dead links, removed /cara-war (404), fixed navbar, and 3-col footer passed.');
