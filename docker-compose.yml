@@ -75,7 +75,7 @@ services:
       - DB_NAME=wartiket_db
       - DB_USER=wartiket
       - DB_PASSWORD=wartiket_secret
-      - DB_POOL_MAX=12
+      - DB_POOL_MAX=20
       - QUEUE_MAX_ACTIVE=200
       - INITIAL_STOCK=1000
       - JWT_SECRET=wartiket-cloud-jwt-secret-2026

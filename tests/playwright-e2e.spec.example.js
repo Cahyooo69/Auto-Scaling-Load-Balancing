@@ -51,13 +51,13 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
       await expect(page.locator('a[href*="cara-war"], a[href*="guide.html"]')).toHaveCount(0);
 
       const navPos = await page.locator('.navbar').evaluate((el) => getComputedStyle(el).position);
-      expect(navPos).toBe('relative');
+      expect(navPos).toBe('sticky');
 
       await page.evaluate(() => window.scrollTo(0, 600));
       const navAfter = await page.locator('.navbar').boundingBox();
       const scrollY = await page.evaluate(() => window.scrollY);
       if (scrollY > 200) {
-        expect(navAfter?.y ?? 0).toBeLessThan(-200);
+        expect(navAfter?.y ?? 99).toBeLessThanOrEqual(1);
       }
 
       const footerCols = await page.locator('.site-footer .footer-inner')

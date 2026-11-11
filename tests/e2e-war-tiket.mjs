@@ -238,12 +238,13 @@ async function main() {
           hasVisibleHeroSearch,
           totalCls,
           navPosition: navStyle ? navStyle.position : '',
+          navZIndex: navStyle ? Number(navStyle.zIndex) : 0,
           navHeight: navStyle ? parseFloat(navStyle.height) : 0,
           navTop: Math.round(navRect0.top),
           navWidth: Math.round(navRect0.width),
           heroBelowNav: heroRect.top >= navRect0.bottom - 1,
           scrollYAfter,
-          navLeftViewportOnScroll: navRectAfter.bottom <= 20,
+          navStickyAfterScroll: Math.abs(navRectAfter.top) <= 1,
           footerCols,
           statusText: document.getElementById('footerClusterStatus')?.textContent?.trim() || '',
           hasResetBtn: Boolean(document.querySelector('.btn-footer-reset')),
@@ -266,13 +267,14 @@ async function main() {
       assert.equal(audit.legacyNavSearchCount, 0, `Floating navbar search icon/overlay must be removed on ${r.path}`);
       assert.equal(audit.hasVisibleHeroSearch, r.expectHeroSearch, `Single search form below hero banner mismatch on ${r.path}`);
       assert.ok(audit.totalCls <= 0.05, `Unexpected CLS bounce on ${r.path}: ${audit.totalCls}`);
-      assert.equal(audit.navPosition, 'relative', `Navbar must remain relative at top of document (not follow scroll) on ${r.path}, got ${audit.navPosition}`);
+      assert.equal(audit.navPosition, 'sticky', `Navbar must use sticky positioning on ${r.path}, got ${audit.navPosition}`);
+      assert.equal(audit.navZIndex, 9999, `Navbar z-index must be 9999, got ${audit.navZIndex}`);
       assert.equal(audit.navHeight, 116, `Navbar explicit height must be 116px on ${r.path}, got ${audit.navHeight}`);
       assert.equal(audit.navTop, 0, `Navbar must start at top: 0 on ${r.path}, got ${audit.navTop}`);
       assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px stage on ${r.path}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
-        assert.ok(audit.navLeftViewportOnScroll, `Navbar must stay at top of page and NOT follow scroll down on ${r.path}`);
+        assert.ok(audit.navStickyAfterScroll, `Navbar must stick at top: 0 when scrolling down on ${r.path}`);
       }
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
@@ -489,6 +491,8 @@ async function main() {
       sla: document.getElementById('stressSlaBadge')?.textContent,
       workers: document.querySelectorAll('#stressWorkerDist .worker-dist-row').length,
       quota: document.getElementById('stressQuotaBadges')?.textContent || '',
+      hasilRowsAfterReset: document.querySelectorAll('#warTestHistoryWrap table tbody tr').length,
+      hasilLatestCount: document.getElementById('hasilLatestCount')?.textContent || '',
       startBtnDisabled: document.getElementById('btnStartStressTest')?.disabled,
       resetBtnDisabled: document.getElementById('btnResetStressTest')?.disabled,
     })`);
@@ -499,6 +503,8 @@ async function main() {
     assert.equal(afterReset.workers, 0);
     assert.ok(afterReset.sla.includes('Siap Diuji'));
     assert.ok(afterReset.quota.includes('496/500'));
+    assert.equal(afterReset.hasilRowsAfterReset, 0, 'Reset Kuota must also clear Hasil War Test history table');
+    assert.equal(afterReset.hasilLatestCount, '0 req', 'Reset Kuota must also reset Hasil War Test latest summary');
     assert.equal(afterReset.startBtnDisabled, false);
     assert.equal(afterReset.resetBtnDisabled, false);
     console.log('  OK: JWT Order History (#riwayat) & Live Stress Test + Reset Kuota (#live-test) verified.');

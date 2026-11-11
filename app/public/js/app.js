@@ -2020,6 +2020,7 @@ async function resetSystemStock(options = {}) {
       totalSeats: 500,
       availableSeats: Number(data.concertStocks?.[id] ?? 500),
     }));
+    clearWarTestHistory({ silent: true });
     resetLiveTestUI(Array.isArray(data.concertQuotas) && data.concertQuotas.length > 0 ? data.concertQuotas : fallbackQuotas);
 
     state.concertsLoaded = false;
@@ -2332,13 +2333,15 @@ function renderHasilWarTestPage() {
   }
 }
 
-function clearWarTestHistory() {
+function clearWarTestHistory({ silent = false } = {}) {
   state.warTestHistory = [];
   try {
     sessionStorage.removeItem('wartiket_war_test_history');
   } catch {}
   renderHasilWarTestPage();
-  showToast('Riwayat Hasil War Test dibersihkan.');
+  if (!silent) {
+    showToast('Riwayat Hasil War Test dibersihkan.');
+  }
 }
 
 async function runLiveStressTest() {

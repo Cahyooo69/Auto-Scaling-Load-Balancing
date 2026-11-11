@@ -1,7 +1,7 @@
 const http = require('http');
 const os = require('os');
 
-function sendSingleHttpPost(targetUrl, payloadStr, agent) {
+function sendSingleHttpPost(targetUrl, payloadStr, agent, attempt = 0) {
   return new Promise((resolve) => {
     const url = new URL(targetUrl);
     const t0 = process.hrtime.bigint();
@@ -38,6 +38,9 @@ function sendSingleHttpPost(targetUrl, payloadStr, agent) {
 
     req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', (err) => {
+      if (err.code === 'ECONNRESET' && attempt < 1) {
+        return resolve(sendSingleHttpPost(targetUrl, payloadStr, agent, attempt + 1));
+      }
       const ms = Number(process.hrtime.bigint() - t0) / 1e6;
       resolve({ status: 0, ms, servedBy: 'error', error: err.message });
     });
@@ -133,9 +136,9 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
         ? 'http://nginx/api/tickets/buy'
         : `http://127.0.0.1:${port}/api/tickets/buy`);
 
-    // Cap generator socket fan-out to 48 so a 0.25 vCPU worker doesn't starve its own event loop on 1.000 bursts
-    const workerConcurrency = Math.min(count, 48);
-    const agent = new http.Agent({ keepAlive: true, maxSockets: 64 });
+    // Match concurrency to 0.25 vCPU event loop + 3x Swarm worker throughput without Linux CFS throttling spikes
+    const workerConcurrency = Math.min(count, 6);
+    const agent = new http.Agent({ keepAlive: true, keepAliveMsecs: 1000, maxSockets: 10 });
     const startedAt = Date.now();
     const results = new Array(count);
     let cursor = 0;

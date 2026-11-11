@@ -130,10 +130,10 @@ let isRedisReady = false;
 const redis = new Redis({
   host: REDIS_HOST,
   port: REDIS_PORT,
-  maxRetriesPerRequest: 1,
+  maxRetriesPerRequest: 2,
   enableOfflineQueue: false,
-  connectTimeout: 3000,
-  commandTimeout: 2000,
+  connectTimeout: 4000,
+  commandTimeout: 5000,
   retryStrategy: (times) => Math.min(times * 100, 2000),
   lazyConnect: true,
 });
@@ -199,9 +199,9 @@ const pool = new Pool({
   user: DB_USER,
   password: DB_PASSWORD,
   max: DB_POOL_MAX, // Bounded pool so 8x Swarm replicas stay within PostgreSQL max_connections
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 3000,
-  statement_timeout: 5000,
+  idleTimeoutMillis: 15000,
+  connectionTimeoutMillis: 8000,
+  statement_timeout: 10000,
 });
 
 let isDbReady = false;
@@ -254,6 +254,7 @@ async function initDatabaseSchema(attempt = 1) {
       }
     } else {
       await pool.query('CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))').catch(() => {});
+      await pool.query("CREATE INDEX IF NOT EXISTS idx_seats_available_id ON seats (concert_id, id) WHERE status = 'Available'").catch(() => {});
       await pool.query(`
         INSERT INTO users (name, email, password, phone, id_card, role)
         VALUES
@@ -912,8 +913,55 @@ async function releaseRedisCheckoutLock({
 }
 
 // --- TRANSAKSI CHECKOUT / WAR TIKET (TAHAP 6 CHECKOUT) ---
-// Short-lived local cache for static concert metadata during high-concurrency checkouts
+// Short-lived local caches for static concert & user metadata during high-concurrency checkouts
 const concertMetaCache = new Map();
+const userMetaCache = new Map();
+
+async function getCheckoutMetadata(userId, concertId) {
+  const now = Date.now();
+  const cachedUser = userMetaCache.get(userId);
+  const hasFreshUser = cachedUser && (now - cachedUser.at) < 60000;
+  const cachedConcert = concertMetaCache.get(concertId);
+  const hasFreshConcert = cachedConcert && (now - cachedConcert.at) < 15000;
+
+  const [userRes, concertRes] = await Promise.all([
+    hasFreshUser
+      ? Promise.resolve(null)
+      : pool.query('SELECT id, name, email FROM users WHERE id = $1', [userId]),
+    hasFreshConcert
+      ? Promise.resolve(null)
+      : pool.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]),
+  ]);
+
+  let userMeta;
+  if (hasFreshUser) {
+    userMeta = cachedUser.data;
+  } else {
+    userMeta = userRes && userRes.rows.length > 0
+      ? { id: userRes.rows[0].id, name: userRes.rows[0].name, email: userRes.rows[0].email }
+      : { id: null, name: 'Penonton Terdaftar', email: 'user@wartiket.id' };
+    if (userMetaCache.size > 2000) userMetaCache.clear();
+    userMetaCache.set(userId, { at: now, data: userMeta });
+  }
+
+  let concertMeta;
+  if (hasFreshConcert) {
+    concertMeta = cachedConcert.data;
+  } else if (concertRes && concertRes.rows.length > 0) {
+    const cRow = concertRes.rows[0];
+    concertMeta = {
+      title: cRow.title,
+      venue: cRow.venue,
+      concertDate: cRow.concert_date,
+      price: parseFloat(cRow.price),
+    };
+    concertMetaCache.set(concertId, { at: now, data: concertMeta });
+  } else {
+    concertMeta = { title: 'Konser Musik', venue: 'Jakarta', concertDate: '2026', price: 1500000 };
+  }
+
+  return { userMeta, concertMeta };
+}
 
 // Atomic locking via Redis Lua + Permanent ACID write to PostgreSQL
 app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
@@ -998,149 +1046,98 @@ app.post(['/api/tickets/buy', '/tickets/buy'], async (req, res) => {
       seatLockAcquired = true;
     }
 
-    // Step 2: Read metadata outside TX lock, then run lean PostgreSQL ACID transaction
+    // Step 2: Single-roundtrip PostgreSQL Atomic ACID Writable CTE (locks seat + writes trx/bookings/details atomically)
     const orderId = `TRX-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-    let bookedSeatNumber = requestedSeatNumber || 'A-01';
-    let ticketPrice = 1500000;
-    let concertTitle = 'Konser Musik';
-    let concertVenue = 'Jakarta';
-    let concertDate = '2026';
-    let buyerName = 'Penonton Terdaftar';
-    let buyerEmail = 'user@wartiket.id';
+    const { userMeta, concertMeta } = await getCheckoutMetadata(userId, concertId);
+    const dbUserId = userMeta.id;
+    const buyerName = userMeta.name;
+    const buyerEmail = userMeta.email;
+    const concertTitle = concertMeta.title;
+    const concertVenue = concertMeta.venue;
+    const concertDate = concertMeta.concertDate;
+    const hostInstance = os.hostname();
 
-    const cachedConcert = concertMetaCache.get(concertId);
-    const hasFreshConcert = cachedConcert && (Date.now() - cachedConcert.at) < 10000;
-    const [userRes, concertRes] = await Promise.all([
-      pool.query('SELECT id, name, email FROM users WHERE id = $1', [userId]),
-      hasFreshConcert
-        ? Promise.resolve(null)
-        : pool.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]),
-    ]);
+    const atomicResult = await pool.query(
+      `WITH claimed_seat AS (
+         UPDATE seats
+         SET status = 'Booked', locked_by = $1::int
+         WHERE id = COALESCE(
+           $2::int,
+           (
+             SELECT id FROM seats
+             WHERE concert_id = $3::int AND status = 'Available'
+             ORDER BY id ASC
+             LIMIT 1
+             FOR UPDATE SKIP LOCKED
+           )
+         )
+         AND concert_id = $3::int
+         AND status = 'Available'
+         RETURNING id, seat_number, category, price
+       ),
+       ins_trx AS (
+         INSERT INTO transactions
+           (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id)
+         SELECT $4::varchar, $1::int, $3::int, id, seat_number, price, 'COMPLETED', $5::varchar
+         FROM claimed_seat
+       ),
+       ins_booking AS (
+         INSERT INTO bookings
+           (booking_code, user_id, concert_id, total_amount, status, server_instance_id)
+         SELECT $4::varchar, $1::int, $3::int, price, 'PAID', $5::varchar
+         FROM claimed_seat
+         RETURNING id
+       ),
+       ins_details AS (
+         INSERT INTO booking_details (booking_id, seat_id, seat_number, category, price)
+         SELECT b.id, s.id, s.seat_number, COALESCE(s.category, 'CAT 1'), s.price
+         FROM ins_booking b CROSS JOIN claimed_seat s
+       )
+       SELECT id, seat_number, category, price FROM claimed_seat`,
+      [dbUserId, seatId, concertId, orderId, hostInstance]
+    );
 
-    const dbUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
-    if (userRes.rows.length > 0) {
-      buyerName = userRes.rows[0].name;
-      buyerEmail = userRes.rows[0].email;
-    }
-
-    if (hasFreshConcert) {
-      ({ title: concertTitle, venue: concertVenue, concertDate, price: ticketPrice } = cachedConcert.data);
-    } else if (concertRes && concertRes.rows.length > 0) {
-      const cRow = concertRes.rows[0];
-      concertTitle = cRow.title;
-      concertVenue = cRow.venue;
-      concertDate = cRow.concert_date;
-      ticketPrice = parseFloat(cRow.price);
-      concertMetaCache.set(concertId, {
-        at: Date.now(),
-        data: { title: concertTitle, venue: concertVenue, concertDate, price: ticketPrice },
+    if (atomicResult.rows.length === 0) {
+      await releaseRedisCheckoutLock({
+        stockKey: redisConcertKey,
+        seatLockKey,
+        seatLockValue,
+        stockDecremented,
+        seatLockAcquired,
+      });
+      stockDecremented = false;
+      seatLockAcquired = false;
+      return res.status(409).json({
+        success: false,
+        message: 'Maaf, kursi yang dipilih baru saja diamankan oleh orang lain di Database relasional.',
+        servedBy: hostInstance,
+        timestamp: new Date().toISOString(),
       });
     }
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    const seatRecord = atomicResult.rows[0];
+    seatId = seatRecord.id;
+    const bookedSeatNumber = seatRecord.seat_number || requestedSeatNumber || 'A-01';
+    const ticketPrice = parseFloat(seatRecord.price || concertMeta.price);
 
-      // Seat selection & row-level locking
-      let seatRecord;
-      if (seatId) {
-        const seatRes = await client.query(
-          `UPDATE seats 
-           SET status = 'Booked', locked_by = $1 
-           WHERE id = $2 AND concert_id = $3 AND status = 'Available' 
-           RETURNING id, seat_number, category, price`,
-          [dbUserId, seatId, concertId]
-        );
-        if (seatRes.rows.length > 0) {
-          seatRecord = seatRes.rows[0];
-        }
-      } else {
-        // Auto-assign next available seat (for k6 load testing or quick checkout)
-        const findSeatRes = await client.query(
-          `UPDATE seats 
-           SET status = 'Booked', locked_by = $1 
-           WHERE id = (
-             SELECT id FROM seats 
-             WHERE concert_id = $2 AND status = 'Available' 
-             ORDER BY id ASC 
-             LIMIT 1 
-             FOR UPDATE SKIP LOCKED
-           )
-           RETURNING id, seat_number, category, price`,
-          [dbUserId, concertId]
-        );
-        if (findSeatRes.rows.length > 0) {
-          seatRecord = findSeatRes.rows[0];
-          seatId = seatRecord.id;
-        }
-      }
-
-      if (!seatRecord) {
-        await client.query('ROLLBACK').catch(() => {});
-        await releaseRedisCheckoutLock({
-          stockKey: redisConcertKey,
-          seatLockKey,
-          seatLockValue,
-          stockDecremented,
-          seatLockAcquired,
-        });
-        stockDecremented = false;
-        seatLockAcquired = false;
-        return res.status(409).json({
-          success: false,
-          message: 'Maaf, kursi yang dipilih baru saja diamankan oleh orang lain di Database relasional.',
-          servedBy: os.hostname(),
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      bookedSeatNumber = seatRecord.seat_number;
-      const bookedSeatCategory = seatRecord.category || 'CAT 1';
-      ticketPrice = parseFloat(seatRecord.price);
-
-      // Single writable CTE writes transactions + bookings + booking_details in one roundtrip
-      await client.query(
-        `WITH ins_trx AS (
-           INSERT INTO transactions
-             (order_id, user_id, concert_id, seat_id, seat_number, amount, status, server_instance_id)
-           VALUES ($1, $2, $3, $4, $5, $6, 'COMPLETED', $7)
-         ),
-         ins_booking AS (
-           INSERT INTO bookings
-             (booking_code, user_id, concert_id, total_amount, status, server_instance_id)
-           VALUES ($1, $2, $3, $6, 'PAID', $7)
-           RETURNING id
-         )
-         INSERT INTO booking_details (booking_id, seat_id, seat_number, category, price)
-         SELECT id, $4, $5, $8, $6 FROM ins_booking`,
-        [orderId, dbUserId, concertId, seatId, bookedSeatNumber, ticketPrice, os.hostname(), bookedSeatCategory]
-      );
-
-      await client.query('COMMIT');
-    } catch (dbErr) {
-      await client.query('ROLLBACK').catch(() => {});
-      console.error(`[DB Error during checkout]:`, dbErr.message);
-      throw dbErr;
-    } finally {
-      client.release();
-    }
-
-    // Update display counter outside the critical TX lock so concurrent buyers never serialize on concerts.id
+    // Update display counter outside the critical row claim so concurrent buyers never serialize on concerts.id
     pool.query(
       'UPDATE concerts SET available_seats = GREATEST(0, LEAST(available_seats, $1)) WHERE id = $2',
       [remainingStock, concertId]
     ).catch(() => {});
 
-    // Invalidate cached reads & release queue/lock cleanly in parallel after DB commit
-    const cleanupTasks = [invalidateConcertCache(concertId)];
-    if (seatLockAcquired && seatLockKey) {
-      cleanupTasks.push(redis.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {}));
-    }
+    // Single pipelined Redis cleanup after ACID commit
+    const pipeline = redis.pipeline();
+    pipeline.del(CONCERTS_CACHE_KEY, `cache:concert:${concertId}:seats`);
     if (queueToken) {
-      cleanupTasks.push(redis.zrem(QUEUE_ACTIVE_KEY, queueToken).catch(() => {}));
-      cleanupTasks.push(redis.del(`queue:meta:${queueToken}`).catch(() => {}));
+      pipeline.zrem(QUEUE_ACTIVE_KEY, queueToken);
+      pipeline.del(`queue:meta:${queueToken}`);
     }
-    await Promise.all(cleanupTasks);
+    const postCommitTasks = [pipeline.exec().catch(() => {})];
+    if (seatLockAcquired && seatLockKey) {
+      postCommitTasks.push(redis.atomicUnlockSeat(seatLockKey, seatLockValue).catch(() => {}));
+    }
+    await Promise.all(postCommitTasks);
 
     // Step 3: Success Return E-Ticket
     return res.status(200).json({
@@ -1301,9 +1298,11 @@ if (require.main === module) {
     console.warn(`[Database] Boot init warning: ${e.message}`);
   });
 
-  app.listen(PORT, () => {
+  const httpServer = app.listen(PORT, () => {
     console.log(`War Tiket Cloud API listening on port ${PORT} [Container: ${os.hostname()}]`);
   });
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
 }
 
 module.exports = {

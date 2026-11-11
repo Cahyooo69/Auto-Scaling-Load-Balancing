@@ -145,7 +145,7 @@ textarea {
   left: 0;
   width: 1440px;
   height: var(--vp-h, 900px);
-  z-index: 1000;
+  z-index: 10050;
   transform-origin: 0 0;
   pointer-events: none;
 }
@@ -218,11 +218,11 @@ html.wt-booting .spa-page.is-active {
 section[id],
 footer[id],
 .hero-card[id] {
-  scroll-margin-top: 112px;
+  scroll-margin-top: 124px;
 }
 
 .navbar {
-  position: relative;
+  position: sticky;
   top: 0;
   left: 0;
   width: 100%;
@@ -230,9 +230,11 @@ footer[id],
   min-height: 116px;
   padding: 16px 30px;
   box-sizing: border-box;
-  background: var(--color-cream);
+  background: rgba(248, 247, 239, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   margin: 0;
-  z-index: 100;
+  z-index: 9999;
 }
 
 html.wt-mobile .navbar {
@@ -2513,7 +2515,7 @@ body.is-mobile .container {
 }
 
 body.is-mobile .navbar {
-  position: relative;
+  position: sticky;
   top: 0;
   left: 0;
   width: 100%;
@@ -2521,7 +2523,7 @@ body.is-mobile .navbar {
   min-height: 112px;
   padding: 10px 16px;
   margin-bottom: 4px;
-  z-index: 100;
+  z-index: 9999;
 }
 
 body.is-mobile .navbar-inner {

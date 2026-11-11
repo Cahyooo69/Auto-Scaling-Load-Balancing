@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS seats (
 );
 
 CREATE INDEX IF NOT EXISTS idx_seats_concert_status ON seats(concert_id, status);
+CREATE INDEX IF NOT EXISTS idx_seats_available_id ON seats(concert_id, id) WHERE status = 'Available';
 
 -- 4. Table Transactions
 CREATE TABLE IF NOT EXISTS transactions (
