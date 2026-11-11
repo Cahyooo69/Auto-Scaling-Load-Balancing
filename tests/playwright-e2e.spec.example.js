@@ -51,7 +51,7 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
       await expect(page.locator('a[href*="cara-war"], a[href*="guide.html"]')).toHaveCount(0);
 
       const navPos = await page.locator('.navbar').evaluate((el) => getComputedStyle(el).position);
-      expect(navPos).toBe('sticky');
+      expect(navPos).toBe('fixed');
 
       await page.evaluate(() => window.scrollTo(0, 600));
       const navAfter = await page.locator('.navbar').boundingBox();

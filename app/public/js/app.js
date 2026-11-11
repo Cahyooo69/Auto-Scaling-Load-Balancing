@@ -31,6 +31,14 @@ function fit() {
   const cw = document.documentElement.clientWidth || DESIGN_W;
   const ch = document.documentElement.clientHeight || 900;
   const mobile = isMobileViewport();
+  const navbar = document.getElementById('navbar');
+  const spaMain = document.getElementById('spaMain');
+
+  if (mobile && navbar && spaMain && navbar.offsetHeight > 0) {
+    const nextPad = `${navbar.offsetHeight}px`;
+    if (spaMain.style.paddingTop !== nextPad) spaMain.style.paddingTop = nextPad;
+  }
+
   const nextSig = `${mobile ? 'm' : 'd'}:${cw}:${ch}`;
   if (nextSig === lastFitSignature && stateReady) return;
   lastFitSignature = nextSig;
@@ -46,6 +54,10 @@ function fit() {
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch)}px`);
     stage.style.zoom = '';
     stage.style.transform = '';
+    if (navbar) navbar.style.transform = '';
+    if (spaMain && navbar && navbar.offsetHeight > 0) {
+      spaMain.style.paddingTop = `${navbar.offsetHeight}px`;
+    }
     document.body.style.height = '';
     if (modalRoot) modalRoot.style.transform = '';
   } else {
@@ -55,8 +67,10 @@ function fit() {
     document.documentElement.style.setProperty('--boot-zoom', String(s));
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
 
-    // Modal root berada di luar #stage agar overlay tetap penuh di semua skala zoom
+    // Modal root & fixed navbar berada di luar #stage agar position: fixed sinkron di seluruh skala zoom
     if (modalRoot) modalRoot.style.transform = `scale(${s})`;
+    if (navbar) navbar.style.transform = `scale(${s})`;
+    if (spaMain) spaMain.style.paddingTop = '';
 
     if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1')) {
       stage.style.zoom = String(s);
@@ -1100,8 +1114,12 @@ function syncActiveNavByRoute(activeKey = state.activePage) {
   });
 }
 
-function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
-  const normalized = String(pageName || '').replace(/^#\/?/, '').toLowerCase();
+/**
+ * Centralized SPA router: clears active booking timers/intervals, switches visible
+ * `.page-section` containers with `.hidden`, and updates active navbar state without jitter.
+ */
+function navigateTo(route, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
+  const normalized = String(route || '').replace(/^#\/?/, '').toLowerCase();
   const targetPage = VALID_SPA_PAGES.includes(normalized) ? normalized : 'beranda';
 
   closeNavAccountDropdown();
@@ -1114,7 +1132,7 @@ function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefr
   document.documentElement.setAttribute('data-active-page', targetPage);
 
   // Sembunyikan seluruh section halaman lain secara instan dan tampilkan target
-  document.querySelectorAll('.spa-page[data-page-section]').forEach((section) => {
+  document.querySelectorAll('.page-section[data-page-section], .spa-page[data-page-section]').forEach((section) => {
     const isTarget = section.dataset.pageSection === targetPage;
     section.classList.toggle('is-active', isTarget);
     section.classList.toggle('hidden', !isTarget);
@@ -1154,21 +1172,25 @@ function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefr
   }
 }
 
+const switchPage = navigateTo;
+window.navigateTo = navigateTo;
+window.switchPage = navigateTo;
+
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
     const navTarget = e.target.closest('a[data-page]');
     if (!navTarget) return;
     e.preventDefault();
     const targetPage = navTarget.dataset.page || navTarget.getAttribute('href') || 'beranda';
-    switchPage(targetPage);
+    navigateTo(targetPage);
   });
 
   window.addEventListener('hashchange', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+    navigateTo(resolvePageFromLocation(), { updateHash: false });
   });
 
   window.addEventListener('popstate', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+    navigateTo(resolvePageFromLocation(), { updateHash: false });
   });
 }
 
@@ -1278,6 +1300,8 @@ function autoFill(email, pass) {
   if (passInput) passInput.value = pass;
 }
 
+let pendingLogoutPromise = null;
+
 async function handleLogin(e) {
   e.preventDefault();
   if (state.isLoggingIn) return;
@@ -1293,6 +1317,7 @@ async function handleLogin(e) {
   }
 
   try {
+    if (pendingLogoutPromise) await pendingLogoutPromise;
     const { res, data } = await fetchJsonWithTimeout(
       '/api/auth/login',
       {
@@ -1347,7 +1372,11 @@ function handleLogout() {
     sessionStorage.removeItem('wartiket_user');
     sessionStorage.removeItem('wartiket_jwt');
   } catch (e) {}
-  fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
+  pendingLogoutPromise = fetch('/api/auth/logout', { method: 'POST', keepalive: true })
+    .catch(() => {})
+    .finally(() => {
+      pendingLogoutPromise = null;
+    });
   updateAuthUI();
   closeNavAccountDropdown();
   closeWarModal();

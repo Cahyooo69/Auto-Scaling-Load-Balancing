@@ -46,6 +46,7 @@
 
 html {
   overflow-x: clip;
+  overflow-y: scroll;
   scrollbar-width: none;
   scrollbar-gutter: stable;
 }
@@ -169,7 +170,8 @@ html.wt-mobile #stage {
 }
 
 #spaMain {
-  min-height: 680px;
+  padding-top: 116px;
+  min-height: 796px;
 }
 
 .container {
@@ -183,7 +185,8 @@ html.wt-mobile #stage {
   display: none !important;
 }
 
-.spa-page {
+.spa-page,
+.page-section {
   display: none;
 }
 
@@ -199,19 +202,23 @@ html[data-active-page="riwayat"] .spa-page[data-page-section="riwayat"],
 html[data-active-page="kontak"] .spa-page[data-page-section="kontak"],
 html[data-active-page="live-test"] .spa-page[data-page-section="live-test"],
 html[data-active-page="hasil-test"] .spa-page[data-page-section="hasil-test"],
-.spa-page.is-active {
+.spa-page.is-active,
+.page-section.is-active {
   display: block;
 }
 
-.spa-page.is-active {
+.spa-page.is-active,
+.page-section.is-active {
   animation: wt-fade-in 0.16s ease-out;
 }
 
-html.wt-booting .spa-page.is-active {
+html.wt-booting .spa-page.is-active,
+html.wt-booting .page-section.is-active {
   animation: none !important;
 }
 
-.spa-page.hidden {
+.spa-page.hidden,
+.page-section.hidden {
   display: none !important;
 }
 
@@ -222,25 +229,28 @@ footer[id],
 }
 
 .navbar {
-  position: sticky;
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
+  width: 1440px;
   height: 116px;
   min-height: 116px;
   padding: 16px 30px;
   box-sizing: border-box;
-  background: rgba(248, 247, 239, 0.94);
+  background: rgba(248, 247, 239, 0.96);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   margin: 0;
-  z-index: 9999;
+  transform: scale(var(--boot-zoom, 1));
+  transform-origin: 0 0;
+  z-index: 1000;
 }
 
 html.wt-mobile .navbar {
   width: 100%;
   height: auto;
   min-height: 112px;
+  transform: none;
 }
 
 .navbar-inner {
@@ -317,14 +327,17 @@ html.wt-mobile .navbar {
 }
 
 .nav-link {
+  display: inline-block;
   font-weight: 700;
   font-size: 15px;
   line-height: 22px;
   color: var(--color-text);
   text-decoration: none;
   padding: 8px 4px;
+  margin: 0;
   position: relative;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: color 0.2s ease;
 }
 
@@ -2515,15 +2528,21 @@ body.is-mobile .container {
 }
 
 body.is-mobile .navbar {
-  position: sticky;
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: auto;
   min-height: 112px;
   padding: 10px 16px;
-  margin-bottom: 4px;
-  z-index: 9999;
+  margin-bottom: 0;
+  transform: none;
+  z-index: 1000;
+}
+
+body.is-mobile #spaMain {
+  padding-top: 120px;
+  min-height: 70vh;
 }
 
 body.is-mobile .navbar-inner {

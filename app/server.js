@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { signJwt } = require('./src/utils/jwt');
+const { signJwt, verifyJwt, extractJwtFromRequest } = require('./src/utils/jwt');
 const { createApiRouter } = require('./src/routes/api');
 
 const app = express();
@@ -520,22 +520,28 @@ app.post(['/api/auth/login', '/api/login'], async (req, res) => {
 
 app.get('/api/auth/session', async (req, res) => {
   const token = extractSessionToken(req);
-  if (!token) {
-    return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
+  if (token && isRedisReady) {
+    try {
+      const raw = await redis.get(`session:${token}`);
+      if (raw) {
+        await redis.expire(`session:${token}`, SESSION_TTL_SEC).catch(() => {});
+        return res.json({ authenticated: true, user: JSON.parse(raw), servedBy: os.hostname() });
+      }
+    } catch {}
   }
-  if (!isRedisReady) {
-    return res.status(503).json({ authenticated: false, degraded: true, servedBy: os.hostname() });
+
+  // Fallback stateless JWT validation across replicas/restarts
+  const jwtTok = extractJwtFromRequest(req);
+  const decoded = jwtTok ? verifyJwt(jwtTok) : null;
+  if (decoded && decoded.id) {
+    return res.json({
+      authenticated: true,
+      user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'user' },
+      servedBy: os.hostname(),
+    });
   }
-  try {
-    const raw = await redis.get(`session:${token}`);
-    if (!raw) {
-      return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
-    }
-    await redis.expire(`session:${token}`, SESSION_TTL_SEC).catch(() => {});
-    return res.json({ authenticated: true, user: JSON.parse(raw), servedBy: os.hostname() });
-  } catch (err) {
-    return res.status(500).json({ authenticated: false, error: err.message, servedBy: os.hostname() });
-  }
+
+  return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
 });
 
 app.post('/api/auth/logout', async (req, res) => {
@@ -1299,6 +1305,14 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
 });
 
 app.use('/api', createApiRouter({ pool, port: PORT, getDbReady: () => isDbReady, checkDbConnection }));
+
+// Catch-all SPA fallback: direct unknown UI routes render index.html without 404 (API/missing assets return 404 JSON)
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/tickets/') || /\.[a-z0-9]{2,5}$/i.test(req.path)) {
+    return res.status(404).json({ success: false, error: 'Not Found' });
+  }
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Boot server
 if (require.main === module) {

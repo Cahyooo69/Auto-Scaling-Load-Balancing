@@ -46,69 +46,69 @@
 <body>
   <script>if (document.documentElement.classList.contains('wt-mobile')) document.body.classList.add('is-mobile');</script>
 
+  <!-- TOP NAVBAR FIXED (position: fixed; top: 0; left: 0; width: 100%; z-index: 1000 anti-layout-shift) -->
+  <header class="navbar" id="navbar" aria-label="Navigasi Utama">
+    <div class="navbar-inner">
+      <a href="#beranda" class="nav-brand" data-page="beranda">
+        <div class="nav-brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+            <path d="M13 5v2" />
+            <path d="M13 17v2" />
+            <path d="M13 11v2" />
+          </svg>
+        </div>
+        <div class="nav-brand-text">
+          <span class="brand-line-1">SISTEM WAR TIKET</span>
+          <span class="brand-line-2">KONSER MUSIK</span>
+        </div>
+      </a>
+
+      <nav aria-label="Menu Utama">
+        <ul class="nav-menu">
+          <li><a href="#beranda" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
+          <li><a href="#konser" class="nav-link" data-page="konser">Konser</a></li>
+          <li><a href="#riwayat" class="nav-link" data-page="riwayat">Riwayat Pemesanan</a></li>
+          <li><a href="#kontak" class="nav-link" data-page="kontak">Kontak</a></li>
+          <li><a href="#live-test" class="nav-link" data-page="live-test">Live Test</a></li>
+          <li><a href="#hasil-test" class="nav-link" data-page="hasil-test">Hasil War Test</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+            <polyline points="10 17 15 12 10 7" />
+            <line x1="15" y1="12" x2="3" y2="12" />
+          </svg>
+          <span id="navAuthLabel">Masuk</span>
+        </button>
+      </div>
+
+      <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
+        <div class="nav-account-meta">
+          <div id="dropdownUserName"
+            style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
+            User</div>
+          <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
+        </div>
+        <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
+          <span>Keluar Akun</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
   <!-- Kanvas skala tetap 1440px agar proporsi visual seragam di semua zoom -->
   <div id="stage">
 
-    <!-- TOP NAVBAR STICKY (Menempel di atas layar saat scroll, tinggi & z-index terkunci anti-mantul) -->
-    <header class="navbar" id="navbar" aria-label="Navigasi Utama">
-      <div class="navbar-inner">
-        <a href="#beranda" class="nav-brand" data-page="beranda">
-          <div class="nav-brand-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path
-                d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
-              <path d="M13 5v2" />
-              <path d="M13 17v2" />
-              <path d="M13 11v2" />
-            </svg>
-          </div>
-          <div class="nav-brand-text">
-            <span class="brand-line-1">SISTEM WAR TIKET</span>
-            <span class="brand-line-2">KONSER MUSIK</span>
-          </div>
-        </a>
-
-        <nav aria-label="Menu Utama">
-          <ul class="nav-menu">
-            <li><a href="#beranda" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
-            <li><a href="#konser" class="nav-link" data-page="konser">Konser</a></li>
-            <li><a href="#riwayat" class="nav-link" data-page="riwayat">Riwayat Pemesanan</a></li>
-            <li><a href="#kontak" class="nav-link" data-page="kontak">Kontak</a></li>
-            <li><a href="#live-test" class="nav-link" data-page="live-test">Live Test</a></li>
-            <li><a href="#hasil-test" class="nav-link" data-page="hasil-test">Hasil War Test</a></li>
-          </ul>
-        </nav>
-
-        <div class="nav-actions">
-          <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-              <polyline points="10 17 15 12 10 7" />
-              <line x1="15" y1="12" x2="3" y2="12" />
-            </svg>
-            <span id="navAuthLabel">Masuk</span>
-          </button>
-        </div>
-
-        <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
-          <div class="nav-account-meta">
-            <div id="dropdownUserName"
-              style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
-              User</div>
-            <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
-          </div>
-          <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
-            <span>Keluar Akun</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
     <main id="spaMain">
       <!-- ==================== HALAMAN 1: BERANDA ==================== -->
-      <div id="page-beranda" class="spa-page" data-page-section="beranda">
+      <section id="page-beranda" class="spa-page page-section" data-page-section="beranda">
         <!-- HERO BANNER UTAMA -->
         <header class="hero-card container">
           <div class="hero-inner">
@@ -253,10 +253,10 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
 
       <!-- ==================== HALAMAN 2: KONSER ==================== -->
-      <div id="page-konser" class="spa-page" data-page-section="konser">
+      <section id="page-konser" class="spa-page page-section" data-page-section="konser">
         <header class="page-hero-band container">
           <span class="page-hero-kicker">Katalog Konser Resmi</span>
           <h1 class="page-hero-title">Konser Sedang Dibuka</h1>
@@ -302,10 +302,10 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
 
       <!-- ==================== HALAMAN 3: KONTAK ==================== -->
-      <div id="page-kontak" class="spa-page" data-page-section="kontak">
+      <section id="page-kontak" class="spa-page page-section" data-page-section="kontak">
         <header class="page-hero-band container">
           <span class="page-hero-kicker">Pusat Bantuan &amp; Dukungan</span>
           <h1 class="page-hero-title">Kontak &amp; Layanan Pelanggan</h1>
@@ -379,9 +379,9 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
       <!-- ==================== HALAMAN 4: RIWAYAT PEMESANAN ==================== -->
-      <div id="page-riwayat" class="spa-page" data-page-section="riwayat">
+      <section id="page-riwayat" class="spa-page page-section" data-page-section="riwayat">
         <header class="page-hero-band container">
           <span class="page-hero-kicker">Order History Terverifikasi JWT</span>
           <h1 class="page-hero-title">Riwayat Pemesanan Tiket</h1>
@@ -416,10 +416,10 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
 
       <!-- ==================== HALAMAN 5: LIVE STRESS TEST / SIMULASI WAR ==================== -->
-      <div id="page-live-test" class="spa-page" data-page-section="live-test">
+      <section id="page-live-test" class="spa-page page-section" data-page-section="live-test">
         <header class="page-hero-band container">
           <span class="page-hero-kicker">Simulasi High-Concurrency Real-Time</span>
           <h1 class="page-hero-title">Live Stress Test &amp; Load Balancer</h1>
@@ -515,10 +515,10 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
 
       <!-- ==================== HALAMAN 6: HASIL WAR TEST & AUDIT SLA ==================== -->
-      <div id="page-hasil-test" class="spa-page" data-page-section="hasil-test">
+      <section id="page-hasil-test" class="spa-page page-section" data-page-section="hasil-test">
         <header class="page-hero-band container">
           <span class="page-hero-kicker">Rekapitulasi &amp; Audit Performa</span>
           <h1 class="page-hero-title">Hasil War Test &amp; Riwayat SLA</h1>
@@ -584,7 +584,7 @@
             </div>
           </div>
         </section>
-      </div>
+      </section>
     </main>
 
     <!-- FOOTER -->
