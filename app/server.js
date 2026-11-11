@@ -202,13 +202,23 @@ const pool = new Pool({
   idleTimeoutMillis: 15000,
   connectionTimeoutMillis: 8000,
   statement_timeout: 10000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
 
 let isDbReady = false;
 
-// Reset status DB bila koneksi idle pool ditutup tiba-tiba oleh PostgreSQL
+// Guard both idle pool and checked-out clients against TCP ECONNRESET crashes
 pool.on('error', () => {
   isDbReady = false;
+});
+pool.on('connect', (client) => {
+  if (!client._wtErrGuarded) {
+    client._wtErrGuarded = true;
+    client.on('error', () => {
+      isDbReady = false;
+    });
+  }
 });
 
 async function checkDbConnection() {
@@ -1226,6 +1236,7 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
     let concertQuotas = [];
     if (isDbReady) {
       const client = await pool.connect();
+      let txFailed = false;
       try {
         await client.query('BEGIN');
         await client.query("UPDATE seats SET status = 'Available', locked_by = NULL");
@@ -1255,10 +1266,11 @@ app.post(['/api/tickets/reset', '/tickets/reset'], async (req, res) => {
         concertQuotas.sort((a, b) => a.id - b.id);
         await client.query('COMMIT');
       } catch (dbErr) {
+        txFailed = true;
         await client.query('ROLLBACK').catch(() => {});
         throw dbErr;
       } finally {
-        client.release();
+        client.release(txFailed);
       }
     }
 
