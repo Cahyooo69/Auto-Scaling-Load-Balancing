@@ -137,7 +137,7 @@ html[data-active-page="hasil-test"] .spa-page[data-page-section="hasil-test"],
 
 /* 2. STICKY TOP NAVBAR */
 .navbar {
-  position: fixed;
+  position: sticky;
   top: 0;
   left: 0;
   width: 100%;

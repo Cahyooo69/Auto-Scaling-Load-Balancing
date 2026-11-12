@@ -307,8 +307,13 @@ async function main() {
     assert.equal(fallbackActivePage, 'beranda', 'Unknown UI path must fall back cleanly to Beranda');
     await cdp.goto(`${BASE_URL}/#kontak`);
     const directHashCheck = await cdp.eval(`({
-      page: document.querySelector('.page-section.is-active')?.dataset.pageSection,
-      navXs: [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => Math.round(el.getBoundingClientRect().left)),
+      page: document.querySelector('.page-section.is-active, .spa-page.is-active')?.dataset.pageSection,
+      navXs: [...document.querySelectorAll('.nav-menu .nav-link')]
+        .filter((el) => {
+          const li = el.closest('li');
+          return (!li || getComputedStyle(li).display !== 'none') && el.offsetParent !== null;
+        })
+        .map((el) => Math.round(el.getBoundingClientRect().left)),
     })`);
     assert.equal(directHashCheck.page, 'kontak', 'Direct /#kontak URL must render Kontak immediately');
     assert.deepEqual(directHashCheck.navXs, baselineNavXs, 'Direct /#kontak navbar X-coords must match baseline with 0px shift');
