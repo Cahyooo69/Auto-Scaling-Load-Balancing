@@ -105,6 +105,14 @@ app.get('/tickets', ticketController.getTicketStatus);
 app.post('/tickets/buy', ticketController.buyTicket);
 app.post('/tickets/reset', ticketController.resetTickets);
 
+// Catch-all SPA fallback: direct unknown UI routes render index.html without 404 (API/missing assets return 404 JSON)
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/tickets/') || /\.[a-z0-9]{2,5}$/i.test(req.path)) {
+    return res.status(404).json({ success: false, error: 'Not Found' });
+  }
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Boot server
 if (require.main === module) {
   redis.connect().catch((e) => {

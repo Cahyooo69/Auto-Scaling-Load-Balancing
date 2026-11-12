@@ -243,6 +243,7 @@ async function main() {
           navPosition: navStyle ? navStyle.position : '',
           navZIndex: navStyle ? Number(navStyle.zIndex) : 0,
           navHeight: navStyle ? parseFloat(navStyle.height) : 0,
+          mainPaddingTop: document.getElementById('spaMain') ? parseFloat(getComputedStyle(document.getElementById('spaMain')).paddingTop) : 0,
           navTop: Math.round(navRect0.top),
           navWidth: Math.round(navRect0.width),
           heroBelowNav: heroRect.top >= navRect0.bottom - 1,
@@ -279,7 +280,7 @@ async function main() {
       assert.ok(audit.navWidth >= 1420 && audit.navWidth <= 1440, `Navbar width must span full stage on ${r.path}, got ${audit.navWidth}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
-        assert.ok(audit.navStickyAfterScroll, `Navbar must stick at top: 0 when scrolling down on ${r.path}`);
+        assert.ok(audit.navStickyAfterScroll, `Navbar must stay locked at top: 0 when scrolling down on ${r.path}`);
       }
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
@@ -298,9 +299,20 @@ async function main() {
         Math.abs(contactCardCheck[0].h - contactCardCheck[1].h) <= 2,
       `Contact & FAQ cards must share equal size on desktop: ${JSON.stringify(contactCardCheck)}`
     );
-    const removedRouteRes = await fetch(`${BASE_URL}/cara-war`);
-    assert.equal(removedRouteRes.status, 404, 'Removed /cara-war route must return HTTP 404 cleanly');
-    console.log('  OK: Multi-page routing, zero dead links, removed /cara-war (404), fixed navbar, and 3-col footer passed.');
+    // Test Scenario 6: unknown route fallback to Beranda without HTTP 404 (while unknown API returns 404 JSON)
+    const unknownRouteRes = await fetch(`${BASE_URL}/halaman-tidak-dikenal`);
+    assert.equal(unknownRouteRes.status, 200, 'Unknown UI path must return HTTP 200 SPA fallback without 404');
+    await cdp.goto(`${BASE_URL}/halaman-tidak-dikenal`);
+    const fallbackActivePage = await cdp.eval(`document.querySelector('.page-section.is-active')?.dataset.pageSection`);
+    assert.equal(fallbackActivePage, 'beranda', 'Unknown UI path must fall back cleanly to Beranda');
+    await cdp.goto(`${BASE_URL}/#kontak`);
+    const directHashCheck = await cdp.eval(`({
+      page: document.querySelector('.page-section.is-active')?.dataset.pageSection,
+      navXs: [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => Math.round(el.getBoundingClientRect().left)),
+    })`);
+    assert.equal(directHashCheck.page, 'kontak', 'Direct /#kontak URL must render Kontak immediately');
+    assert.deepEqual(directHashCheck.navXs, baselineNavXs, 'Direct /#kontak navbar X-coords must match baseline with 0px shift');
+    console.log('  OK: Multi-page routing, zero dead links, SPA 404-fallback, fixed navbar, and 3-col footer passed.');
 
     // -----------------------------------------------------------------------
     // SKENARIO 2b: SPA Hash Navigation (#beranda <-> #konser <-> #kontak) & Timer Cleanup

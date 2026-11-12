@@ -750,8 +750,12 @@ function syncActiveNavByRoute(activeKey = state.activePage) {
   });
 }
 
-function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
-  const normalized = String(pageName || '').replace(/^#\/?/, '').toLowerCase();
+/**
+ * Centralized SPA router: clears active booking timers/intervals, switches visible
+ * `.page-section` containers with `.hidden`, and updates active navbar state without jitter.
+ */
+function navigateTo(route, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
+  const normalized = String(route || '').replace(/^#\/?/, '').toLowerCase();
   const targetPage = VALID_SPA_PAGES.includes(normalized) ? normalized : 'beranda';
 
   closeNavAccountDropdown();
@@ -764,7 +768,7 @@ function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefr
   document.documentElement.setAttribute('data-active-page', targetPage);
 
   // Sembunyikan seluruh section halaman lain secara instan dan tampilkan target
-  document.querySelectorAll('.spa-page[data-page-section]').forEach((section) => {
+  document.querySelectorAll('.page-section[data-page-section], .spa-page[data-page-section]').forEach((section) => {
     const isTarget = section.dataset.pageSection === targetPage;
     section.classList.toggle('is-active', isTarget);
     section.classList.toggle('hidden', !isTarget);
@@ -805,21 +809,25 @@ function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefr
   }
 }
 
+const switchPage = navigateTo;
+window.navigateTo = navigateTo;
+window.switchPage = navigateTo;
+
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
     const navTarget = e.target.closest('a[data-page]');
     if (!navTarget) return;
     e.preventDefault();
     const targetPage = navTarget.dataset.page || navTarget.getAttribute('href') || 'beranda';
-    switchPage(targetPage);
+    navigateTo(targetPage);
   });
 
   window.addEventListener('hashchange', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+    navigateTo(resolvePageFromLocation(), { updateHash: false });
   });
 
   window.addEventListener('popstate', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+    navigateTo(resolvePageFromLocation(), { updateHash: false });
   });
 }
 
@@ -1014,6 +1022,8 @@ function autoFill(email, pass) {
   if (passInput) passInput.value = pass;
 }
 
+let pendingLogoutPromise = null;
+
 async function handleLogin(e) {
   e.preventDefault();
   if (state.isLoggingIn) return;
@@ -1029,6 +1039,7 @@ async function handleLogin(e) {
   }
 
   try {
+    if (pendingLogoutPromise) await pendingLogoutPromise;
     const { res, data } = await fetchJsonWithTimeout(
       '/api/auth/login',
       {
