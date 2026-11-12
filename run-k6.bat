@@ -6,11 +6,11 @@ echo =========================================================================
 echo       K6 LOAD TESTING: SISTEM WAR TIKET KONSER (1.000 VIRTUAL USERS)
 echo =========================================================================
 echo.
-echo Tahapan Pengujian:
-echo   1. Tahap 1 (1m) : 100 VU  (Baseline ^& Sanity Check)
-echo   2. Tahap 2 (2m) : 400 VU  (Ramp-Up / Load Balancer Test)
-echo   3. Tahap 3 (3m) : 1000 VU (Peak War Tiket / Memicu Auto-Scaling)
-echo   4. Tahap 4 (1m) : 0 VU    (Cool-Down)
+echo Tahapan Pengujian (Durasi Total 3 Menit):
+echo   1. Tahap 1 (30s) : 10 VU   (Baseline ^& Sanity Check)
+echo   2. Tahap 2 (45s) : 100 VU  (Ramp-Up Awal)
+echo   3. Tahap 3 (45s) : 500 VU  (Beban Menengah)
+echo   4. Tahap 4 (60s) : 1000 VU (Peak War Tiket / Lonjakan Maksimal)
 echo.
 echo Alur Pengguna: Login -^> Lihat Katalog Konser -^> War Tiket Checkout
 echo.

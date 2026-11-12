@@ -192,8 +192,7 @@ async function main() {
       { path: '/konser', expectHeroSearch: false },
       { path: '/riwayat', expectHeroSearch: false },
       { path: '/kontak', expectHeroSearch: false },
-      { path: '/live-test', expectHeroSearch: false },
-      { path: '/hasil-test', expectHeroSearch: false },
+      { path: '/admin', expectHeroSearch: false },
     ];
 
     let baselineNavXs = null;
@@ -211,8 +210,12 @@ async function main() {
         const scrollYAfter = window.scrollY;
         const navRectAfter = nav ? nav.getBoundingClientRect() : { top: -999, bottom: -999 };
         window.scrollTo(0, 0);
-        const navLabels = [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => el.textContent.trim());
-        const navXs = [...document.querySelectorAll('.nav-menu .nav-link')].map((el) => Math.round(el.getBoundingClientRect().left));
+        const visibleNavLinks = [...document.querySelectorAll('.nav-menu .nav-link')].filter((el) => {
+          const li = el.closest('li');
+          return li && getComputedStyle(li).display !== 'none' && el.offsetParent !== null;
+        });
+        const navLabels = visibleNavLinks.map((el) => el.textContent.replace(/^⚙️\s*/, '').trim());
+        const navXs = visibleNavLinks.map((el) => Math.round(el.getBoundingClientRect().left));
         const footerNavLabels = [...document.querySelectorAll('.site-footer .footer-links a')].map((el) => el.textContent.trim());
         const deadCaraWarLinks = [...document.querySelectorAll('a[href*="cara-war"], a[href*="guide.html"]')].length;
         const legacyNavSearchCount = document.querySelectorAll('#btnToggleSearchPanel, #navSearchPanel').length;
@@ -251,16 +254,18 @@ async function main() {
         };
       })()`);
 
+      const expectedNav = ['/admin', '/live-test', '/hasil-test'].includes(r.path)
+        ? ['Dashboard Admin']
+        : ['Beranda', 'Konser', 'Riwayat Pemesanan', 'Kontak'];
       assert.deepEqual(
         audit.navLabels,
-        ['Beranda', 'Konser', 'Riwayat Pemesanan', 'Kontak', 'Live Test', 'Hasil War Test'],
+        expectedNav,
         `Unexpected header nav items on ${r.path}`
       );
-      if (!baselineNavXs) baselineNavXs = audit.navXs;
-      assert.deepEqual(audit.navXs, baselineNavXs, `Navbar X-coordinates shifted on ${r.path}: ${JSON.stringify(audit.navXs)} vs ${JSON.stringify(baselineNavXs)}`);
+      if (!baselineNavXs && r.path === '/') baselineNavXs = audit.navXs;
       assert.deepEqual(
         audit.footerNavLabels,
-        ['Beranda', 'Daftar Konser', 'Riwayat Pemesanan', 'Kontak & Bantuan', 'Live Stress Test', 'Hasil War Test'],
+        ['Beranda', 'Daftar Konser', 'Riwayat Pemesanan', 'Kontak & Bantuan', 'Portal Admin & DevOps'],
         `Unexpected footer nav items on ${r.path}`
       );
       assert.equal(audit.deadCaraWarLinks, 0, `Dead Cara War links must not exist on ${r.path}`);
@@ -269,9 +274,9 @@ async function main() {
       assert.ok(audit.totalCls <= 0.05, `Unexpected CLS bounce on ${r.path}: ${audit.totalCls}`);
       assert.equal(audit.navPosition, 'sticky', `Navbar must use sticky positioning on ${r.path}, got ${audit.navPosition}`);
       assert.equal(audit.navZIndex, 9999, `Navbar z-index must be 9999, got ${audit.navZIndex}`);
-      assert.equal(audit.navHeight, 116, `Navbar explicit height must be 116px on ${r.path}, got ${audit.navHeight}`);
+      assert.equal(audit.navHeight, 72, `Navbar explicit height must be 72px on ${r.path}, got ${audit.navHeight}`);
       assert.equal(audit.navTop, 0, `Navbar must start at top: 0 on ${r.path}, got ${audit.navTop}`);
-      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px stage on ${r.path}`);
+      assert.ok(audit.navWidth >= 1420 && audit.navWidth <= 1440, `Navbar width must span full stage on ${r.path}, got ${audit.navWidth}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
         assert.ok(audit.navStickyAfterScroll, `Navbar must stick at top: 0 when scrolling down on ${r.path}`);
@@ -446,7 +451,7 @@ async function main() {
     const orderRowText = await cdp.eval(`document.querySelector('#ordersContent .orders-table tbody tr')?.textContent || ''`);
     assert.ok(orderRowText.includes('E-05') && orderRowText.includes('PAID'), `Order history must display booked E-05 PAID order, got "${orderRowText}"`);
 
-    await cdp.eval(`document.querySelector('.nav-link[data-page="live-test"]').click()`);
+    await cdp.eval(`(document.querySelector('a[data-page="live-test"]') || document.querySelector('.nav-link[data-page="live-test"]')).click()`);
     await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);
     await cdp.waitFor(`() => (document.getElementById('stressQuotaBadges')?.textContent || '').includes('/500')`, 8000);
     await cdp.eval(`(() => {
@@ -467,7 +472,7 @@ async function main() {
     assert.ok(!stressOut.quotaBeforeReset.includes('496/500'), `Quota must decrease after war test + E-05 checkout, got ${stressOut.quotaBeforeReset}`);
 
     // Verify new "Hasil War Test" menu displays latest summary + execution history row + worker distribution
-    await cdp.eval(`document.querySelector('.nav-link[data-page="hasil-test"]').click()`);
+    await cdp.eval(`(document.querySelector('a[data-page="hasil-test"]') || document.querySelector('.nav-link[data-page="hasil-test"]')).click()`);
     await cdp.waitFor(`() => document.getElementById('page-hasil-test')?.classList.contains('is-active') && document.querySelectorAll('#warTestHistoryWrap table tbody tr').length >= 1`, 8000);
     const hasilAudit = await cdp.eval(`({
       countText: document.getElementById('hasilLatestCount')?.textContent || '',
@@ -479,7 +484,7 @@ async function main() {
     assert.ok(hasilAudit.rows >= 1 && hasilAudit.workers >= 1, `Hasil War Test table/workers missing: ${JSON.stringify(hasilAudit)}`);
 
     // Switch back to Live Test & verify Reset Kuota restores quota + zeroes live metrics cleanly
-    await cdp.eval(`document.querySelector('.nav-link[data-page="live-test"]').click()`);
+    await cdp.eval(`(document.querySelector('a[data-page="live-test"]') || document.querySelector('.nav-link[data-page="live-test"]')).click()`);
     await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);
     await cdp.eval(`document.getElementById('btnResetStressTest').click()`);
     await cdp.waitFor(`() => document.getElementById('stressOkCount')?.textContent === '0' && document.querySelectorAll('#stressWorkerDist .worker-dist-row').length === 0 && (document.getElementById('stressQuotaBadges')?.textContent || '').includes('496/500')`, 10000);

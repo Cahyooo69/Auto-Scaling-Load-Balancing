@@ -18,27 +18,24 @@
     href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Nunito:wght@400;600;700;800;900&display=swap"
     rel="stylesheet">
   <link rel="preload" as="image" href="/img/hero-bg.jpg">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=3.3">
   <script>
     (function () {
       var d = document.documentElement;
       var h = (location.hash || '').replace(/^#\/?/, '').toLowerCase();
       var p = (location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
-      var valid = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-test'];
+      var valid = ['beranda', 'konser', 'riwayat', 'kontak', 'admin', 'live-test', 'hasil-test'];
       var page = valid.indexOf(h) >= 0
         ? h
-        : (p === '/konser' || p === '/concerts.html'
-          ? 'konser'
-          : (p === '/riwayat' ? 'riwayat' : (p === '/kontak' || p === '/contact.html' ? 'kontak' : (p === '/live-test' ? 'live-test' : (p === '/hasil-test' ? 'hasil-test' : 'beranda')))));
+        : (p === '/admin' || p === '/admin.html'
+          ? 'admin'
+          : (p === '/konser' || p === '/concerts.html'
+            ? 'konser'
+            : (p === '/riwayat' ? 'riwayat' : (p === '/kontak' || p === '/contact.html' ? 'kontak' : (p === '/live-test' ? 'live-test' : (p === '/hasil-test' ? 'hasil-test' : 'beranda'))))));
       d.setAttribute('data-active-page', page);
-      d.classList.add('wt-booting');
-      var cw = d.clientWidth || 1440;
-      var sw = (window.screen && window.screen.width) || cw;
-      var ow = window.outerWidth || sw;
-      var touch = Boolean(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
-      var mobile = (touch && cw <= 1024) || (cw <= 768 && (sw <= 768 || ow <= 820));
+      var cw = d.clientWidth || window.innerWidth || 1440;
+      var mobile = cw <= 768 || Boolean(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse) and (max-width: 1024px)').matches);
       d.classList.toggle('wt-mobile', mobile);
-      d.style.setProperty('--boot-zoom', mobile ? '1' : String(cw / 1440));
     })();
   </script>
 </head>
@@ -46,8 +43,7 @@
 <body>
   <script>if (document.documentElement.classList.contains('wt-mobile')) document.body.classList.add('is-mobile');</script>
 
-  <!-- Kanvas skala tetap 1440px agar proporsi visual seragam di semua zoom -->
-  <div id="stage">
+  <div id="stage" class="site-wrapper">
 
     <!-- TOP NAVBAR STICKY (Menempel di atas layar saat scroll, tinggi & z-index terkunci anti-mantul) -->
     <header class="navbar" id="navbar" aria-label="Navigasi Utama">
@@ -70,13 +66,12 @@
         </a>
 
         <nav aria-label="Menu Utama">
-          <ul class="nav-menu">
-            <li><a href="#beranda" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
-            <li><a href="#konser" class="nav-link" data-page="konser">Konser</a></li>
-            <li><a href="#riwayat" class="nav-link" data-page="riwayat">Riwayat Pemesanan</a></li>
-            <li><a href="#kontak" class="nav-link" data-page="kontak">Kontak</a></li>
-            <li><a href="#live-test" class="nav-link" data-page="live-test">Live Test</a></li>
-            <li><a href="#hasil-test" class="nav-link" data-page="hasil-test">Hasil War Test</a></li>
+          <ul class="nav-menu" id="mainNavMenu">
+            <li class="nav-item-buyer"><a href="#beranda" class="nav-link active" data-page="beranda" aria-current="page">Beranda</a></li>
+            <li class="nav-item-buyer"><a href="#konser" class="nav-link" data-page="konser">Konser</a></li>
+            <li class="nav-item-buyer"><a href="#riwayat" class="nav-link" data-page="riwayat">Riwayat Pemesanan</a></li>
+            <li class="nav-item-buyer"><a href="#kontak" class="nav-link" data-page="kontak">Kontak</a></li>
+            <li id="navAdminItem" class="nav-item-admin" style="display: none;"><a href="#admin" class="nav-link" data-page="admin" style="color: var(--color-gold); font-weight: 800;">⚙️ Dashboard Admin</a></li>
           </ul>
         </nav>
 
@@ -99,6 +94,9 @@
               User</div>
             <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
           </div>
+          <a href="#admin" id="dropdownAdminLink" class="btn-logout-chip" style="display: none; text-decoration: none; margin-bottom: 8px; background: #e0f2fe; color: #0284c7; text-align: center; font-weight: 800;" onclick="closeNavAccountDropdown()">
+            ⚙️ Dashboard Admin &amp; DevOps
+          </a>
           <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
             <span>Keluar Akun</span>
           </button>
@@ -176,27 +174,13 @@
         <!-- RINGKASAN SISTEM & MONITORING CLUSTER -->
         <section id="welcome" class="section-welcome">
           <div class="container welcome-container">
-            <div class="polaroid-wrapper">
-              <div class="polaroid-frame">
-                <div class="badge-circle-green">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                    <polyline points="9 12 11 14 15 10" />
-                  </svg>
-                  <span>Aman &amp;<br>Cepat</span>
-                </div>
-
-                <div class="polaroid-photo">
-                  <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80"
-                    alt="Panggung Konser Musik Outdoor" decoding="async">
-                </div>
-
-                <div class="badge-circle-orange" title="Auto-Scaling Cloud Cluster">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
+            <div class="welcome-visual-card">
+              <div class="welcome-image-wrap">
+                <img src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80"
+                  alt="Panggung Konser Musik Outdoor" decoding="async">
+                <div class="welcome-image-overlay">
+                  <div class="welcome-chip-pill">⚡ 0% Overselling Guaranteed</div>
+                  <div class="welcome-chip-sub">Docker Swarm Ingress &bull; Redis Atomic Lock</div>
                 </div>
               </div>
             </div>
@@ -238,17 +222,31 @@
               </div>
 
               <div class="cloud-chips-row">
-                <div class="cloud-chip">
-                  <span class="dot-online"></span>
-                  <span>Worker Node: <strong id="liveHostBadge"
-                      class="font-mono selectable-text">Memuat...</strong></span>
+                <div class="trust-badge-item">
+                  <div class="trust-badge-icon">&#128737;&#65039;</div>
+                  <div class="trust-badge-content">
+                    <strong>100% Tiket Resmi</strong>
+                    <span>Bebas calo &amp; garansi keaslian masuk venue</span>
+                  </div>
                 </div>
-                <div class="cloud-chip">
-                  <span>Redis: <strong id="liveRedisBadge">Connected</strong></span>
+                <div class="trust-badge-item">
+                  <div class="trust-badge-icon">&#9889;</div>
+                  <div class="trust-badge-content">
+                    <strong>Antrean Adil Real-Time</strong>
+                    <span>Garansi 0% overselling &amp; anti-double booking</span>
+                  </div>
                 </div>
-                <div class="cloud-chip">
-                  <span>PostgreSQL 16: <strong id="liveDbBadge">Connected</strong></span>
+                <div class="trust-badge-item">
+                  <div class="trust-badge-icon">&#127915;</div>
+                  <div class="trust-badge-content">
+                    <strong>E-Ticket Terbit Instan</strong>
+                    <span>Langsung masuk akun &amp; siap cetak PDF resmi</span>
+                  </div>
                 </div>
+                <!-- Hidden telemetry anchors to ensure background health poller continuity -->
+                <span id="liveHostBadge" style="display:none">Memuat...</span>
+                <span id="liveRedisBadge" style="display:none">Connected</span>
+                <span id="liveDbBadge" style="display:none">Connected</span>
               </div>
             </div>
           </div>
@@ -281,24 +279,8 @@
               </button>
             </div>
 
-            <div id="carouselViewport" class="carousel-viewport" tabindex="0" aria-label="Daftar Konser Carousel">
+            <div id="carouselViewport" class="carousel-viewport" tabindex="0" aria-label="Daftar Konser">
               <div id="carouselTrack" class="carousel-track"></div>
-            </div>
-
-            <div id="carouselControls" class="carousel-controls">
-              <button type="button" id="carouselPrevBtn" class="carousel-arrow-btn" aria-label="Halaman Sebelumnya" onclick="prevCarouselPage()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-
-              <div id="carouselDots" class="pagination-dots" role="tablist" aria-label="Halaman Konser"></div>
-
-              <button type="button" id="carouselNextBtn" class="carousel-arrow-btn" aria-label="Halaman Berikutnya" onclick="nextCarouselPage()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
             </div>
           </div>
         </section>
@@ -418,9 +400,103 @@
         </section>
       </div>
 
+      <!-- ==================== HALAMAN ADMIN: DASHBOARD & DEVOPS ==================== -->
+      <div id="page-admin" class="spa-page" data-page-section="admin">
+        <header class="page-hero-band container">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <span class="page-hero-kicker" style="background: rgba(234, 179, 8, 0.15); color: #b45309; border: 1px solid rgba(234, 179, 8, 0.3);">Portal Admin &amp; DevOps Control Center</span>
+              <h1 class="page-hero-title">Dashboard Admin &amp; Status Cluster</h1>
+              <p class="page-hero-subtitle">
+                Pemantauan real-time infrastruktur Docker Swarm, Redis In-Memory Atomic Lock, PostgreSQL 16, dan audit transaksi war tiket.
+              </p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+              <button type="button" class="btn-pill-primary" onclick="loadAdminDashboardData()">
+                <span>🔄 Refresh Data</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section class="section-admin">
+          <div class="container">
+            <!-- Cluster Status Cards -->
+            <div class="stress-metrics-grid" style="margin-bottom: 24px;">
+              <div class="stress-metric-card" style="border-top: 3px solid #10b981;">
+                <span class="stress-metric-label">Active Worker Node (Swarm)</span>
+                <strong id="adminWorkerNode" class="stress-metric-val" style="font-size: 15px; font-family: 'JetBrains Mono', monospace; word-break: break-all;">Memuat...</strong>
+                <span style="font-size: 12px; color: var(--color-text-muted);">Nginx Ingress Mesh Round-Robin</span>
+              </div>
+              <div class="stress-metric-card" style="border-top: 3px solid #0284c7;">
+                <span class="stress-metric-label">Redis Atomic Lock</span>
+                <strong id="adminRedisStatus" class="stress-metric-val" style="color: #0284c7;">Memuat...</strong>
+                <span style="font-size: 12px; color: var(--color-text-muted);">In-Memory Lua Scripts Active</span>
+              </div>
+              <div class="stress-metric-card" style="border-top: 3px solid #8b5cf6;">
+                <span class="stress-metric-label">PostgreSQL Database</span>
+                <strong id="adminDbStatus" class="stress-metric-val" style="color: #8b5cf6;">Memuat...</strong>
+                <span style="font-size: 12px; color: var(--color-text-muted);">ACID Transactions &amp; Lock</span>
+              </div>
+              <div class="stress-metric-card" style="border-top: 3px solid #f59e0b;">
+                <span class="stress-metric-label">Total Transaksi Selesai</span>
+                <strong id="adminTxCount" class="stress-metric-val" style="color: #f59e0b;">0</strong>
+                <span style="font-size: 12px; color: var(--color-text-muted);">PostgreSQL Orders Recorded</span>
+              </div>
+            </div>
+
+            <!-- Quick Action & Subnav Banner -->
+            <div class="panel-card" style="margin-bottom: 24px; padding: 20px 24px; background: #f8fafc; border: 1px solid #e2e8f0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <h3 style="font-size: 18px; font-weight: 800; color: var(--color-forest); margin: 0 0 4px 0;">Menu Pengujian Beban &amp; Audit SLA</h3>
+                  <p style="font-size: 13px; color: var(--color-text-muted); margin: 0;">Alat simulasi beban tinggi (stress test) dan audit performa SLA yang dipisahkan dari tampilan publik pembeli.</p>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <a href="#live-test" class="btn-pill-primary" data-page="live-test" style="font-size: 13px; padding: 10px 18px;">
+                    <span>⚡ Buka Live Stress Test</span>
+                  </a>
+                  <a href="#hasil-test" class="btn-pill-outline btn-pill-outline-dark" data-page="hasil-test" style="font-size: 13px; padding: 10px 18px;">
+                    <span>📊 Buka Hasil War Test</span>
+                  </a>
+                  <button type="button" class="btn-pill-outline btn-pill-outline-dark" style="font-size: 13px; padding: 10px 18px; color: #dc2626; border-color: #fca5a5;" onclick="resetSystemStock({ skipConfirm: false, sourceBtn: this })">
+                    <span>🔄 Reset Kuota Seluruh Konser</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Transactions Table -->
+            <div class="panel-card">
+              <div class="panel-toolbar">
+                <div>
+                  <h2 class="modal-title" style="font-size: 22px;">Daftar Transaksi Tiket Terkini (Real-time Audit)</h2>
+                  <p class="modal-subtitle">Log 20 transaksi terbaru yang tersimpan di PostgreSQL beserta container node yang memproses.</p>
+                </div>
+                <button type="button" class="btn-pill-outline btn-pill-outline-dark" style="font-size: 13px; padding: 8px 16px;" onclick="loadAdminTransactions()">
+                  <span>Perbarui Tabel</span>
+                </button>
+              </div>
+
+              <div id="adminTxTableWrap" class="orders-table-wrap">
+                <div class="catalog-loading-state">
+                  <span>Memuat transaksi dari database...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
       <!-- ==================== HALAMAN 5: LIVE STRESS TEST / SIMULASI WAR ==================== -->
       <div id="page-live-test" class="spa-page" data-page-section="live-test">
         <header class="page-hero-band container">
+          <div style="margin-bottom: 12px;">
+            <a href="#admin" class="btn-text-link" data-page="admin" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-gold);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <span>Kembali ke Dashboard Admin</span>
+            </a>
+          </div>
           <span class="page-hero-kicker">Simulasi High-Concurrency Real-Time</span>
           <h1 class="page-hero-title">Live Stress Test &amp; Load Balancer</h1>
           <p class="page-hero-subtitle">
@@ -520,6 +596,12 @@
       <!-- ==================== HALAMAN 6: HASIL WAR TEST & AUDIT SLA ==================== -->
       <div id="page-hasil-test" class="spa-page" data-page-section="hasil-test">
         <header class="page-hero-band container">
+          <div style="margin-bottom: 12px;">
+            <a href="#admin" class="btn-text-link" data-page="admin" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-gold);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <span>Kembali ke Dashboard Admin</span>
+            </a>
+          </div>
           <span class="page-hero-kicker">Rekapitulasi &amp; Audit Performa</span>
           <h1 class="page-hero-title">Hasil War Test &amp; Riwayat SLA</h1>
           <p class="page-hero-subtitle">
@@ -618,8 +700,7 @@
               <li><a href="#konser" data-page="konser">Daftar Konser</a></li>
               <li><a href="#riwayat" data-page="riwayat">Riwayat Pemesanan</a></li>
               <li><a href="#kontak" data-page="kontak">Kontak &amp; Bantuan</a></li>
-              <li><a href="#live-test" data-page="live-test">Live Stress Test</a></li>
-              <li><a href="#hasil-test" data-page="hasil-test">Hasil War Test</a></li>
+              <li><a href="#admin" data-page="admin" style="color: var(--color-gold); font-weight: 700;">Portal Admin &amp; DevOps</a></li>
             </ul>
           </div>
 
@@ -656,7 +737,7 @@
     </footer>
   </div>
 
-  <script src="/js/app.js"></script>
+  <script src="/js/app.js?v=3.3"></script>
 </body>
 
 </html>

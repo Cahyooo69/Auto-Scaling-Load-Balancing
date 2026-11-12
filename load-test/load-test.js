@@ -11,19 +11,16 @@ export const totalTransactions = new Counter('total_transactions_attempted');
 
 export const options = {
   stages: [
-    // Tahap 1: Baseline & Sanity Check (100 VUs)
-    { duration: '1m', target: 100 },
-    // Tahap 2: Ramp-Up / Load Balancer Test (400 VUs)
-    { duration: '2m', target: 400 },
-    // Tahap 3: Peak War Tiket / Memicu Auto-Scaling (1.000 VUs)
-    { duration: '3m', target: 1000 },
-    // Tahap 4: Cool-Down (0 VUs)
-    { duration: '1m', target: 0 },
+    // Tahapan Standar 3 SKS: Ramp-up 10 -> 100 -> 500 -> 1000 VU dalam durasi total 3 Menit
+    { duration: '30s', target: 10 },    // Tahap 1: Sanity & Baseline (10 VU)
+    { duration: '45s', target: 100 },   // Tahap 2: Ramp-up Awal (100 VU)
+    { duration: '45s', target: 500 },   // Tahap 3: Beban Menengah (500 VU)
+    { duration: '60s', target: 1000 },  // Tahap 4: Peak War Tiket (1.000 VU)
   ],
   thresholds: {
-    // Target SLA: 95% permintaan selesai dalam waktu < 500ms
-    http_req_duration: ['p(95)<500'],
-    // SLA Keandalan: Tingkat kegagalan server (5xx / drop) harus < 1%
+    // Target SLA Dosen: Waktu tanggap < 200ms
+    http_req_duration: ['p(95)<200'],
+    // SLA Keandalan Dosen: Tingkat kegagalan server (5xx / drop) < 1%
     server_failures: ['rate<0.01'],
   },
 };

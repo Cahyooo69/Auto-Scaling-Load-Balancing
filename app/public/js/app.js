@@ -1,224 +1,35 @@
 // SISTEM WAR TIKET KONSER MUSIK - Frontend UI Controller (Multi-Page Architecture)
-// Fixed 1440px Scaled Stage + Navbar Paten di Atas + Shared Overlays + E-Ticket Print.
+// Modern Responsive Web Architecture + Sticky Navbar + Modal Overlays + E-Ticket Print.
 
 // ============================================================================
-// 1. ZOOM & STAGE SCALING (KUNCI TAMPILAN DI SEMUA ZOOM 25% - 500%)
+// 1. RESPONSIVE VIEWPORT CONTROLLER
 // ============================================================================
 
-const DESIGN_W = 1440;
-let activeScale = 1;
-let lastFitSignature = '';
 var stateReady = false;
 
 function getScale() {
-  return activeScale;
+  return 1;
 }
 
 function isMobileViewport() {
   if (typeof window === 'undefined') return false;
-  const cw = document.documentElement.clientWidth;
-  const sw = window.screen?.width || cw;
-  const ow = window.outerWidth || sw;
-  const isTouchPrimary = Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)').matches);
-  const isNarrowWindow = cw <= 768 && (sw <= 768 || ow <= 820);
-  return (isTouchPrimary && cw <= 1024) || isNarrowWindow;
+  const cw = document.documentElement.clientWidth || window.innerWidth || 1440;
+  return cw <= 768;
 }
 
 function fit() {
-  const stage = document.getElementById('stage');
-  if (!stage) return;
-
-  const cw = document.documentElement.clientWidth || DESIGN_W;
-  const ch = document.documentElement.clientHeight || 900;
   const mobile = isMobileViewport();
-  const nextSig = `${mobile ? 'm' : 'd'}:${cw}:${ch}`;
-  if (nextSig === lastFitSignature && stateReady) return;
-  lastFitSignature = nextSig;
-
   document.documentElement.classList.toggle('wt-mobile', mobile);
   document.body?.classList.toggle('is-mobile', mobile);
-
-  const modalRoot = document.getElementById('modalRoot');
-  if (mobile) {
-    activeScale = 1;
-    document.documentElement.style.setProperty('--s', '1');
-    document.documentElement.style.setProperty('--boot-zoom', '1');
-    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch)}px`);
-    stage.style.zoom = '';
-    stage.style.transform = '';
-    document.body.style.height = '';
-    if (modalRoot) modalRoot.style.transform = '';
-  } else {
-    const s = cw / DESIGN_W;
-    activeScale = s;
-    document.documentElement.style.setProperty('--s', String(s));
-    document.documentElement.style.setProperty('--boot-zoom', String(s));
-    document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
-
-    // Modal root berada di luar #stage agar overlay tetap penuh di semua skala zoom
-    if (modalRoot) modalRoot.style.transform = `scale(${s})`;
-
-    if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1')) {
-      stage.style.zoom = String(s);
-      stage.style.transform = '';
-      document.body.style.height = '';
-    } else {
-      stage.style.zoom = '';
-      stage.style.transform = `scale(${s})`;
-      document.body.style.height = `${stage.scrollHeight * s}px`;
-    }
-  }
-
-  const nextPerPage = mobile ? 1 : 3;
-  if (stateReady && state.cardsPerPage !== nextPerPage) {
-    state.cardsPerPage = nextPerPage;
-    state.currentPage = 0;
-    if (state.activePage === 'konser' && state.allConcerts.length > 0) renderCarousel();
-  }
 }
 
 fit();
-['resize', 'load'].forEach((ev) => addEventListener(ev, fit));
-visualViewport?.addEventListener('resize', fit);
-
-// Lapisan tambahan: cegah shortcut zoom Ctrl+scroll & Ctrl+/-/0 di halaman
-window.addEventListener(
-  'wheel',
-  (e) => {
-    if (e.ctrlKey) e.preventDefault();
-  },
-  { passive: false }
-);
-
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '0', '_'].includes(e.key)) {
-    e.preventDefault();
-  }
-});
+window.addEventListener('resize', fit);
+window.addEventListener('DOMContentLoaded', fit);
 
 // ============================================================================
-// 2. APPLICATION STATE & SAMPLE CONCERT FALLBACK DATA (12 KONSER / 4 HALAMAN)
+// 2. APPLICATION STATE
 // ============================================================================
-
-const SAMPLE_CONCERTS = [
-  {
-    id: 4,
-    title: 'Bruno Mars - 24K Magic Live in Jakarta',
-    artist: 'Bruno Mars',
-    venue: 'Jakarta International Stadium (JIS), Jakarta',
-    city: 'Jakarta',
-    concertDate: '12 Maret 2027, 20:00 WIB',
-    price: 1850000,
-    totalSeats: 500,
-    availableSeats: 412,
-    imageUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 5,
-    title: 'Tulus - Tur Manusia Bandung',
-    artist: 'Tulus',
-    venue: 'Eldorado Dome, Bandung',
-    city: 'Bandung',
-    concertDate: '25 Maret 2027, 19:30 WIB',
-    price: 650000,
-    totalSeats: 400,
-    availableSeats: 280,
-    imageUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 6,
-    title: 'Hindia & Feast - Malam Alternatif Nusantara',
-    artist: 'Hindia & .Feast',
-    venue: 'Jatim Expo Convention Hall, Surabaya',
-    city: 'Surabaya',
-    concertDate: '04 April 2027, 19:00 WIB',
-    price: 450000,
-    totalSeats: 450,
-    availableSeats: 319,
-    imageUrl: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 7,
-    title: 'Raisa - Symphony of Love Live Concert',
-    artist: 'Raisa',
-    venue: 'Indonesia Convention Exhibition (ICE) BSD, Tangerang',
-    city: 'Jakarta',
-    concertDate: '18 April 2027, 19:30 WIB',
-    price: 900000,
-    totalSeats: 500,
-    availableSeats: 388,
-    imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 8,
-    title: 'Dewa 19 Featuring Virzha - Pesta Rakyat',
-    artist: 'Dewa 19',
-    venue: 'Stadion Gelora Bung Tomo, Surabaya',
-    city: 'Surabaya',
-    concertDate: '02 Mei 2027, 19:30 WIB',
-    price: 550000,
-    totalSeats: 600,
-    availableSeats: 470,
-    imageUrl: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 9,
-    title: 'NIKI - Buzz World Tour Indonesia',
-    artist: 'NIKI',
-    venue: 'Beach City International Stadium, Jakarta',
-    city: 'Jakarta',
-    concertDate: '16 Mei 2027, 20:00 WIB',
-    price: 1350000,
-    totalSeats: 500,
-    availableSeats: 245,
-    imageUrl: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 10,
-    title: 'Prambanan Jazz Festival Heritage Edition',
-    artist: 'Various Jazz Artists',
-    venue: 'Candi Prambanan Open Stage, Yogyakarta',
-    city: 'Yogyakarta',
-    concertDate: '29 Mei 2027, 17:00 WIB',
-    price: 800000,
-    totalSeats: 550,
-    availableSeats: 405,
-    imageUrl: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 11,
-    title: 'Maliq & D Essentials - Groove Under The Stars',
-    artist: 'Maliq & D Essentials',
-    venue: 'GWK Cultural Park, Bali',
-    city: 'Bali',
-    concertDate: '12 Juni 2027, 18:30 WITA',
-    price: 700000,
-    totalSeats: 400,
-    availableSeats: 350,
-    imageUrl: 'https://images.unsplash.com/photo-1501612780327-45045538702b?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-  {
-    id: 12,
-    title: 'Ed Sheeran - Mathematics Acoustic Night',
-    artist: 'Ed Sheeran',
-    venue: 'Trans Studio Convention Center, Bandung',
-    city: 'Bandung',
-    concertDate: '26 Juni 2027, 19:30 WIB',
-    price: 1650000,
-    totalSeats: 500,
-    availableSeats: 295,
-    imageUrl: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=900&q=80',
-    isSample: true,
-  },
-];
 
 const state = {
   activePage: 'beranda',
@@ -245,6 +56,7 @@ const state = {
   selectedConcert: null,
   seats: [],
   selectedSeat: null,
+  selectedPaymentMethod: 'QRIS Instan (GoPay/OVO/ShopeePay/BCA)',
 
   queueToken: null,
   queueTicketNumber: null,
@@ -522,27 +334,13 @@ async function fetchConcerts({ force = false, render = isConcertsPage() } = {}) 
       ...c,
       city: extractCity(c),
       dateLabel: extractDateLabel(c.concertDate),
-      isSample: Boolean(c.isSample),
     }));
-
-    // Tambahkan data contoh jika kurang dari 10 konser agar carousel 4 halaman dapat diuji
-    if (merged.length < 10) {
-      const existingIds = new Set(merged.map((c) => c.id));
-      for (const sample of SAMPLE_CONCERTS) {
-        if (!existingIds.has(sample.id)) {
-          merged.push({
-            ...sample,
-            dateLabel: extractDateLabel(sample.concertDate),
-          });
-        }
-      }
-    }
 
     state.allConcerts = merged;
     state.concertsLoaded = true;
     populateFilterDropdowns();
 
-    // Hanya render carousel jika user memang sedang berada di halaman Konser
+    // Hanya render kartu konser jika user memang sedang berada di halaman Konser
     if (isConcertsPage()) {
       readSearchParamsFromUrl();
       applyFilters();
@@ -568,14 +366,7 @@ function populateSelectOptions(id, placeholder, values, selectedValue) {
 function populateFilterDropdowns(sourceList = null) {
   const list = Array.isArray(sourceList) && sourceList.length > 0
     ? sourceList
-    : (state.allConcerts.length > 0
-      ? state.allConcerts
-      : [
-          { city: 'Jakarta', dateLabel: '15 Desember 2026' },
-          { city: 'Jakarta', dateLabel: '20 Januari 2027' },
-          { city: 'Jakarta', dateLabel: '28 Februari 2027' },
-          ...SAMPLE_CONCERTS.map((c) => ({ ...c, dateLabel: extractDateLabel(c.concertDate) })),
-        ]);
+    : state.allConcerts;
   const cities = Array.from(new Set(list.map((c) => c.city).filter(Boolean))).sort();
   const dates = Array.from(new Set(list.map((c) => c.dateLabel).filter(Boolean)));
 
@@ -625,182 +416,22 @@ function renderConcertCardHtml(c, query) {
   `;
 }
 
-function getTotalPages() {
-  return Math.max(1, Math.ceil(state.filteredConcerts.length / state.cardsPerPage));
-}
-
 function renderCarousel() {
   const track = document.getElementById('carouselTrack');
-  const viewport = document.getElementById('carouselViewport');
-  const controls = document.getElementById('carouselControls');
   const emptyState = document.getElementById('emptySearchState');
-  const dotsWrap = document.getElementById('carouselDots');
-  if (!track || !viewport || !controls || !emptyState || !dotsWrap) return;
+  if (!track || !emptyState) return;
 
   const list = state.filteredConcerts;
   if (list.length === 0) {
     track.innerHTML = '';
-    viewport.style.display = 'none';
-    controls.style.display = 'none';
     emptyState.classList.add('active');
-    fit();
     return;
   }
 
   emptyState.classList.remove('active');
-  viewport.style.display = 'block';
-  controls.style.display = 'flex';
-
-  const totalPages = getTotalPages();
-  if (state.currentPage >= totalPages) state.currentPage = Math.max(0, totalPages - 1);
-
-  const pages = [];
-  for (let i = 0; i < list.length; i += state.cardsPerPage) {
-    pages.push(list.slice(i, i + state.cardsPerPage));
-  }
-
-  track.innerHTML = pages
-    .map(
-      (pageItems) =>
-        `<div class="carousel-page">${pageItems
-          .map((c) => renderConcertCardHtml(c, state.searchQuery))
-          .join('')}</div>`
-    )
+  track.innerHTML = list
+    .map((c) => renderConcertCardHtml(c, state.searchQuery))
     .join('');
-
-  dotsWrap.innerHTML = Array.from({ length: totalPages }, (_, idx) => {
-    const isActive = idx === state.currentPage;
-    return `<button type="button" class="dot ${isActive ? 'active' : ''}" role="tab" aria-selected="${isActive}" aria-label="Halaman ${idx + 1}" onclick="goToCarouselPage(${idx})"></button>`;
-  }).join('');
-
-  updateCarouselPosition(false);
-  fit();
-}
-
-function updateCarouselPosition(dragDeltaPx = false) {
-  const viewport = document.getElementById('carouselViewport');
-  const track = document.getElementById('carouselTrack');
-  const prevBtn = document.getElementById('carouselPrevBtn');
-  const nextBtn = document.getElementById('carouselNextBtn');
-  const dots = document.querySelectorAll('#carouselDots .dot');
-
-  const totalPages = getTotalPages();
-  const pageWidth = viewport && viewport.clientWidth > 0 ? viewport.clientWidth : 1380;
-  const baseOffset = -state.currentPage * pageWidth;
-
-  if (track) {
-    if (typeof dragDeltaPx === 'number') {
-      track.classList.add('is-dragging');
-      track.style.transform = `translateX(${baseOffset + dragDeltaPx}px)`;
-    } else {
-      track.classList.remove('is-dragging');
-      track.style.transform = `translateX(${baseOffset}px)`;
-    }
-  }
-
-  if (prevBtn) prevBtn.disabled = state.currentPage <= 0;
-  if (nextBtn) nextBtn.disabled = state.currentPage >= totalPages - 1;
-
-  dots.forEach((dot, idx) => {
-    const active = idx === state.currentPage;
-    dot.classList.toggle('active', active);
-    dot.setAttribute('aria-selected', String(active));
-  });
-}
-
-function goToCarouselPage(pageIdx) {
-  const maxPage = getTotalPages() - 1;
-  state.currentPage = Math.max(0, Math.min(pageIdx, maxPage));
-  updateCarouselPosition(false);
-}
-
-function prevCarouselPage() {
-  if (state.currentPage > 0) goToCarouselPage(state.currentPage - 1);
-}
-
-function nextCarouselPage() {
-  if (state.currentPage < getTotalPages() - 1) goToCarouselPage(state.currentPage + 1);
-}
-
-// Carousel Pointer/Touch Drag (dibagi --s agar akurat) & Keyboard Controls
-function initCarouselInteractions() {
-  const viewport = document.getElementById('carouselViewport');
-  if (!viewport) return;
-
-  let isDragging = false;
-  let startX = 0;
-  let currentDelta = 0;
-
-  function onStart(clientX, target) {
-    if (target.closest('button, input, label, a, select')) return;
-    isDragging = true;
-    startX = clientX;
-    currentDelta = 0;
-  }
-
-  function onMove(clientX) {
-    if (!isDragging) return;
-    const scale = getScale();
-    let dx = (clientX - startX) / scale;
-    const maxPage = getTotalPages() - 1;
-    // Tambah tahanan di ujung karena tanpa loop
-    if ((state.currentPage === 0 && dx > 0) || (state.currentPage === maxPage && dx < 0)) {
-      dx *= 0.25;
-    }
-    currentDelta = dx;
-    updateCarouselPosition(currentDelta);
-  }
-
-  function onEnd() {
-    if (!isDragging) return;
-    isDragging = false;
-    const threshold = 80;
-    const maxPage = getTotalPages() - 1;
-
-    if (currentDelta <= -threshold && state.currentPage < maxPage) {
-      state.currentPage += 1;
-    } else if (currentDelta >= threshold && state.currentPage > 0) {
-      state.currentPage -= 1;
-    }
-    currentDelta = 0;
-    updateCarouselPosition(false);
-  }
-
-  viewport.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    onStart(e.clientX, e.target);
-  });
-  window.addEventListener('mousemove', (e) => onMove(e.clientX));
-  window.addEventListener('mouseup', onEnd);
-
-  viewport.addEventListener(
-    'touchstart',
-    (e) => {
-      if (e.touches.length === 1) onStart(e.touches[0].clientX, e.target);
-    },
-    { passive: true }
-  );
-  viewport.addEventListener(
-    'touchmove',
-    (e) => {
-      if (isDragging && e.touches.length === 1) onMove(e.touches[0].clientX);
-    },
-    { passive: true }
-  );
-  viewport.addEventListener('touchend', onEnd);
-
-  // Navigasi keyboard panah kiri/kanan (khusus saat halaman Konser aktif & modal tertutup)
-  window.addEventListener('keydown', (e) => {
-    if (!isConcertsPage()) return;
-    const activeTag = document.activeElement?.tagName;
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
-    if (document.querySelector('.modal-overlay.active')) return;
-    if (e.key === 'ArrowLeft') {
-      prevCarouselPage();
-    } else if (e.key === 'ArrowRight') {
-      nextCarouselPage();
-    }
-  });
 }
 
 // ============================================================================
@@ -1044,7 +675,7 @@ function handleAuthNavClick() {
 // 7. ROUTING SPA BERBASIS HASH (#beranda, #konser, #kontak) & CLEANUP TIMER
 // ============================================================================
 
-const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-test'];
+const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'admin', 'live-test', 'hasil-test'];
 let ordersAbortController = null;
 let stressTestController = null;
 
@@ -1053,6 +684,7 @@ function resolvePageFromLocation() {
   if (VALID_SPA_PAGES.includes(hash)) return hash;
 
   const path = (window.location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+  if (path === '/admin' || path === '/admin.html') return 'admin';
   if (path === '/konser' || path === '/concerts.html') return 'konser';
   if (path === '/riwayat') return 'riwayat';
   if (path === '/kontak' || path === '/contact.html') return 'kontak';
@@ -1089,6 +721,24 @@ function stopTicketBookingTimers(targetPage) {
 }
 
 function syncActiveNavByRoute(activeKey = state.activePage) {
+  const isAdminArea = activeKey === 'admin' || activeKey === 'live-test' || activeKey === 'hasil-test';
+  const isAdminUser = Boolean(state.currentUser && state.currentUser.role === 'admin');
+  const isAdminMode = isAdminArea || isAdminUser;
+
+  const navAdmin = document.getElementById('navAdminItem');
+  if (navAdmin) {
+    navAdmin.style.display = isAdminMode ? '' : 'none';
+  }
+  const dropAdmin = document.getElementById('dropdownAdminLink');
+  if (dropAdmin) {
+    dropAdmin.style.display = isAdminUser ? 'block' : 'none';
+  }
+
+  // Admin hanya melihat Dashboard Admin saja (sembunyikan Beranda, Konser, Riwayat, Kontak)
+  document.querySelectorAll('.nav-item-buyer').forEach((li) => {
+    li.style.display = isAdminMode ? 'none' : '';
+  });
+
   document.querySelectorAll('.nav-link[data-page]').forEach((link) => {
     const isCurrent = link.dataset.page === activeKey;
     link.classList.toggle('active', isCurrent);
@@ -1138,10 +788,11 @@ function switchPage(pageName, { updateHash = true, scrollToTop = true, forceRefr
     } else {
       readSearchParamsFromUrl();
       applyFilters();
-      updateCarouselPosition(false);
     }
   } else if (targetPage === 'riwayat') {
     fetchMyOrders();
+  } else if (targetPage === 'admin') {
+    loadAdminDashboardData();
   } else if (targetPage === 'live-test') {
     refreshLiveTestQuota();
   } else if (targetPage === 'hasil-test') {
@@ -1241,6 +892,91 @@ function updateAuthUI() {
     if (authLabel) authLabel.textContent = 'Masuk';
     closeNavAccountDropdown();
   }
+
+  syncActiveNavByRoute(state.activePage);
+}
+
+async function loadAdminDashboardData() {
+  const nodeEl = document.getElementById('adminWorkerNode');
+  const redisEl = document.getElementById('adminRedisStatus');
+  const dbEl = document.getElementById('adminDbStatus');
+
+  try {
+    const res = await fetch('/health');
+    if (res.ok) {
+      const data = await res.json();
+      if (nodeEl) nodeEl.textContent = data.container || 'localhost';
+      if (redisEl) {
+        redisEl.textContent = data.redis || 'CONNECTED';
+        redisEl.style.color = data.redis === 'CONNECTED' ? '#10b981' : '#dc2626';
+      }
+      if (dbEl) {
+        dbEl.textContent = data.database || 'CONNECTED';
+        dbEl.style.color = data.database === 'CONNECTED' ? '#10b981' : '#dc2626';
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch /health for admin', err);
+  }
+
+  loadAdminTransactions();
+}
+
+async function loadAdminTransactions() {
+  const wrap = document.getElementById('adminTxTableWrap');
+  const txCountEl = document.getElementById('adminTxCount');
+  if (!wrap) return;
+
+  try {
+    const res = await fetch('/api/transactions');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const list = data.transactions || [];
+    if (txCountEl) txCountEl.textContent = list.length;
+
+    if (list.length === 0) {
+      wrap.innerHTML = '<div class="catalog-loading-state"><span>Belum ada transaksi tiket tercatat di database.</span></div>';
+      return;
+    }
+
+    let rows = list.map((tx) => {
+      const timeStr = tx.created_at ? new Date(tx.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+      const numAmount = Number(tx.amount || 0);
+      const amountStr = !isNaN(numAmount) && numAmount > 0 ? `Rp ${numAmount.toLocaleString('id-ID')}` : (tx.amount || '-');
+      const userStr = tx.user_name ? `${escapeHtml(tx.user_name)} (${escapeHtml(tx.user_email || '')})` : (tx.user_email || 'Pengguna');
+      const concertStr = escapeHtml(tx.concert_title || 'Konser');
+      const seatStr = tx.seat_number ? escapeHtml(tx.seat_number) : '-';
+      const orderId = escapeHtml(tx.order_id || '-');
+      const worker = escapeHtml(tx.server_instance_id || 'node-worker');
+
+      return `<tr>
+        <td style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--color-forest);">${orderId}</td>
+        <td>${userStr}</td>
+        <td><strong>${concertStr}</strong> &bull; Kursi ${seatStr}</td>
+        <td style="font-family: 'JetBrains Mono', monospace;">${amountStr}</td>
+        <td><span class="sla-badge is-pass" style="font-size: 11px; padding: 3px 8px;">${escapeHtml(tx.status || 'PAID')}</span></td>
+        <td style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--color-text-muted);">${worker}</td>
+        <td style="font-size: 12px; color: var(--color-text-muted);">${timeStr}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<table class="orders-table" style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Pembeli</th>
+          <th>Detail Tiket</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Worker Node</th>
+          <th>Waktu</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch (err) {
+    wrap.innerHTML = `<div class="catalog-loading-state" style="color: #dc2626;"><span>Gagal memuat log transaksi: ${escapeHtml(err.message)}</span></div>`;
+  }
 }
 
 function requireAuthAndOpenWar(concertIds) {
@@ -1319,7 +1055,9 @@ async function handleLogin(e) {
     closeLoginModal();
     showToast(`Selamat datang, ${data.user.name}!`);
 
-    if (state.activePage === 'riwayat') {
+    if (data.user?.role === 'admin') {
+      switchPage('admin');
+    } else if (state.activePage === 'riwayat') {
       fetchMyOrders();
     }
 
@@ -1348,9 +1086,10 @@ function handleLogout() {
     sessionStorage.removeItem('wartiket_jwt');
   } catch (e) {}
   fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
-  updateAuthUI();
   closeNavAccountDropdown();
   closeWarModal();
+  switchPage('beranda');
+  updateAuthUI();
   if (state.activePage === 'riwayat') {
     fetchMyOrders();
   }
@@ -1754,6 +1493,20 @@ function updateSeatSummary() {
   }
 }
 
+function selectPaymentMethod(method) {
+  state.selectedPaymentMethod = method;
+  const summaryEl = document.getElementById('summaryPaymentMethod');
+  if (summaryEl) summaryEl.textContent = method;
+  document.querySelectorAll('.payment-method-card').forEach((card) => {
+    const radio = card.querySelector('input[type="radio"]');
+    if (radio) {
+      const isMatch = method.toLowerCase().includes(radio.value.toLowerCase().slice(0, 4));
+      card.classList.toggle('active', isMatch);
+      radio.checked = isMatch;
+    }
+  });
+}
+
 function goToPhaseDataDiri() {
   if (!state.selectedSeat) return;
   clearWarFeedback();
@@ -1772,6 +1525,8 @@ function goToPhaseDataDiri() {
   document.getElementById('buyerEmailAddress').value = u.email || '';
   document.getElementById('summaryConcertName').textContent = c.title || '-';
   document.getElementById('summarySeatCode').textContent = s.seatNumber || '-';
+  const summaryPay = document.getElementById('summaryPaymentMethod');
+  if (summaryPay) summaryPay.textContent = state.selectedPaymentMethod || 'QRIS Instan (GoPay/OVO/ShopeePay/BCA)';
   document.getElementById('summaryTotalCost').textContent = `Rp ${finalPrice.toLocaleString('id-ID')}`;
 }
 
@@ -1826,36 +1581,6 @@ async function executeCheckout() {
   if (backBtn) backBtn.disabled = true;
 
   try {
-    // Konser sampel tambahan (id > 3) diproses tanpa merusak kuota DB konser utama 1-3
-    if (state.selectedConcert?.isSample) {
-      if (state.selectedSeat.status === 'Booked' || state.selectedSeat.status === 'Locked') {
-        showWarFeedback('Kursi ini sudah diamankan. Silakan pilih kursi lain.');
-        showToast('Kursi sudah diamankan. Silakan pilih kursi lain.', true);
-        state.isCheckingOut = false;
-        backToPhaseSeat();
-        renderSeats();
-        return;
-      }
-
-      await pollHealth();
-      const orderId = `TRX-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-      state.selectedSeat.status = 'Booked';
-      state.selectedConcert.availableSeats = Math.max(0, Number(state.selectedConcert.availableSeats || 1) - 1);
-
-      displayETicket(
-        {
-          orderId,
-          concert: state.selectedConcert,
-          user: state.currentUser,
-          seat: state.selectedSeat,
-          amount: Number(state.selectedSeat?.price || state.selectedConcert.price || 0),
-        },
-        state.lastWorkerHost
-      );
-      renderCarousel();
-      return;
-    }
-
     const payload = {
       userId: state.currentUser?.id || 1,
       concertId: state.activeWarConcertId,
@@ -1933,6 +1658,8 @@ function displayETicket(t, host) {
   document.getElementById('ticketBuyer').textContent = customBuyer || t.user?.name || state.currentUser?.name || '-';
   document.getElementById('ticketSeat').textContent = t.seat?.seatNumber || state.selectedSeat?.seatNumber || '-';
   document.getElementById('ticketPrice').textContent = `Rp ${Number(t.amount || state.selectedSeat?.price || 0).toLocaleString('id-ID')}`;
+  const payMethodEl = document.getElementById('ticketPaymentMethod');
+  if (payMethodEl) payMethodEl.textContent = state.selectedPaymentMethod || 'QRIS Instan';
 }
 
 function renderStressQuotaBadges(quotas) {
@@ -2457,7 +2184,7 @@ function ensureSharedModals() {
 
   const root = document.createElement('div');
   root.id = 'modalRoot';
-  root.className = 'scaled-overlay-root';
+  root.className = 'modal-root';
   root.innerHTML = `
     <!-- Bar Multi-Konser Terpilih -->
     <div id="multiSelectBar" class="multi-select-bar" role="region" aria-label="Konser Terpilih">
@@ -2471,22 +2198,41 @@ function ensureSharedModals() {
       </div>
     </div>
 
-    <!-- Modal Login Akun Demo -->
+    <!-- Modal Login Akun Konsumen -->
     <div id="loginModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Login Akun">
       <div class="modal-card modal-card-sm">
         <button type="button" class="modal-close-btn" aria-label="Tutup Login" onclick="closeLoginModal()">&times;</button>
 
         <div class="modal-header-center">
-          <h3 class="modal-title">Masuk ke Sistem</h3>
-          <p class="modal-subtitle">Pilih salah satu Akun Demo atau ketik kredensial Anda</p>
+          <h3 class="modal-title">Masuk ke Akun Anda</h3>
+          <p class="modal-subtitle">Silakan masuk untuk melanjutkan pemilihan kursi dan pemesanan tiket resmi.</p>
         </div>
 
         <div id="loginGuardNotice" class="modal-notice-banner">
           Anda harus masuk akun terlebih dahulu sebelum memilih kursi dan mengikuti War Tiket.
         </div>
 
+        <form class="modal-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label class="form-label" for="modalLoginEmail">Alamat Email</label>
+            <input type="email" id="modalLoginEmail" class="form-pill-input" required placeholder="nama@email.com" value="user@wartiket.id">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modalLoginPassword">Kata Sandi</label>
+            <input type="password" id="modalLoginPassword" class="form-pill-input" required placeholder="Masukkan kata sandi" value="password123">
+          </div>
+
+          <button type="submit" id="btnLoginSubmit" class="btn-pill-primary modal-submit-btn">
+            <span>Masuk Sekarang</span>
+          </button>
+        </form>
+
         <div class="demo-accounts-box">
-          <span class="demo-accounts-title">Pilih Akun Demo (1-Klik):</span>
+          <div class="demo-accounts-header">
+            <span class="demo-accounts-title">⚡ Akun Cepat Pengujian:</span>
+            <span class="demo-accounts-badge">1-Klik Isi</span>
+          </div>
           <div class="demo-accounts-grid">
             <button type="button" class="demo-account-btn" onclick="autoFill('admin@wartiket.id', 'password123')">
               <div class="demo-account-name">ADMIN</div>
@@ -2498,22 +2244,6 @@ function ensureSharedModals() {
             </button>
           </div>
         </div>
-
-        <form class="modal-form" onsubmit="handleLogin(event)">
-          <div>
-            <label class="form-label" for="modalLoginEmail">Alamat Email</label>
-            <input type="email" id="modalLoginEmail" class="form-pill-input" required value="admin@wartiket.id">
-          </div>
-
-          <div>
-            <label class="form-label" for="modalLoginPassword">Password</label>
-            <input type="password" id="modalLoginPassword" class="form-pill-input" required value="password123">
-          </div>
-
-          <button type="submit" id="btnLoginSubmit" class="btn-pill-primary" style="width: 100%; margin-top: 8px;">
-            <span>Masuk Sekarang</span>
-          </button>
-        </form>
       </div>
     </div>
 
@@ -2590,19 +2320,53 @@ function ensureSharedModals() {
         </div>
 
         <div id="phaseDataDiri" style="display: none;">
-          <div style="margin-bottom: 18px;">
-            <h3 class="modal-title" style="font-size: 22px; line-height: 28px;">Konfirmasi Pemesanan</h3>
-            <p class="modal-subtitle">Data terisi otomatis dari akun login Anda untuk kecepatan war tiket.</p>
+          <div style="margin-bottom: 14px;">
+            <h3 class="modal-title" style="font-size: 22px; line-height: 28px;">Data Pemesan &amp; Pembayaran</h3>
+            <p class="modal-subtitle">Pastikan data sesuai kartu identitas (KTP/Paspor) untuk verifikasi pintu masuk venue.</p>
           </div>
 
           <div class="form-grid-2">
-            <div>
-              <label class="form-label" for="buyerFullName">Nama Lengkap</label>
-              <input type="text" id="buyerFullName" class="form-pill-input" style="padding: 10px 14px; font-size: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="buyerFullName">Nama Lengkap (Sesuai KTP)</label>
+              <input type="text" id="buyerFullName" class="form-pill-input" placeholder="Nama Lengkap">
             </div>
-            <div>
-              <label class="form-label" for="buyerEmailAddress">Alamat Email</label>
-              <input type="email" id="buyerEmailAddress" class="form-pill-input" style="padding: 10px 14px; font-size: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="buyerEmailAddress">Alamat Email Penerima E-Ticket</label>
+              <input type="email" id="buyerEmailAddress" class="form-pill-input" placeholder="nama@email.com">
+            </div>
+          </div>
+
+          <div style="margin-top: 14px;">
+            <label class="form-label" style="margin-bottom: 6px;">Pilih Metode Pembayaran</label>
+            <div class="payment-methods-grid" id="paymentMethodsGrid">
+              <label class="payment-method-card active" onclick="selectPaymentMethod('QRIS Instan (GoPay/OVO/ShopeePay/BCA)')">
+                <input type="radio" name="paymentOption" value="QRIS" checked>
+                <div class="payment-method-icon">&#128241;</div>
+                <div class="payment-method-info">
+                  <div class="payment-method-title">QRIS Instan</div>
+                  <div class="payment-method-desc">GoPay, OVO, DANA, ShopeePay, BCA Mobile</div>
+                </div>
+                <div class="payment-method-badge">INSTAN</div>
+              </label>
+
+              <label class="payment-method-card" onclick="selectPaymentMethod('Virtual Account Bank (BCA / Mandiri / BNI / BRI)')">
+                <input type="radio" name="paymentOption" value="Virtual Account">
+                <div class="payment-method-icon">&#127974;</div>
+                <div class="payment-method-info">
+                  <div class="payment-method-title">Virtual Account (VA)</div>
+                  <div class="payment-method-desc">Transfer Bank BCA, Mandiri, BNI, BRI</div>
+                </div>
+                <div class="payment-method-badge">OTOMATIS</div>
+              </label>
+
+              <label class="payment-method-card" onclick="selectPaymentMethod('Kartu Kredit / Debit (Visa / Mastercard)')">
+                <input type="radio" name="paymentOption" value="Kartu Kredit">
+                <div class="payment-method-icon">&#128179;</div>
+                <div class="payment-method-info">
+                  <div class="payment-method-title">Kartu Kredit / Debit Online</div>
+                  <div class="payment-method-desc">Visa, Mastercard, JCB Terenkripsi 3D-Secure</div>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -2614,6 +2378,14 @@ function ensureSharedModals() {
             <div class="modal-summary-row">
               <span>Nomor Kursi:</span>
               <strong id="summarySeatCode" style="color: var(--color-forest);">-</strong>
+            </div>
+            <div class="modal-summary-row">
+              <span>Metode Pembayaran:</span>
+              <strong id="summaryPaymentMethod" style="color: var(--color-forest);">QRIS Instan (GoPay/OVO/ShopeePay/BCA)</strong>
+            </div>
+            <div class="modal-summary-row">
+              <span>Biaya Layanan &amp; Pajak:</span>
+              <span style="color: #15803d; font-weight: 700;">Rp 0 (Promo Termasuk)</span>
             </div>
             <div class="modal-summary-total">
               <span>Total Tagihan:</span>
@@ -2633,22 +2405,23 @@ function ensureSharedModals() {
 
         <div id="phaseETicket" style="display: none;">
           <div class="eticket-screen-heading no-print">
-            <h3 class="modal-title eticket-screen-title">E-Ticket Resmi</h3>
+            <h3 class="modal-title eticket-screen-title">E-Ticket Resmi Terbit</h3>
+            <p class="modal-subtitle">Simpan atau cetak E-Ticket resmi ini sebagai bukti sah akses masuk venue konser.</p>
           </div>
 
           <div class="eticket-paper" id="eTicketPrintArea">
             <div class="eticket-header">
               <div class="eticket-brand-block">
-                <div class="eticket-kicker">E-TICKET RESMI</div>
+                <div class="eticket-kicker">E-TICKET RESMI &bull; TIKET KONSER MUSIK</div>
                 <div class="eticket-brand-title">SISTEM WAR TIKET KONSER MUSIK</div>
                 <div class="eticket-order-row">
-                  Order ID: <strong id="ticketCode" class="selectable-text font-mono">TRX-XXXX</strong>
+                  Booking Code / Order ID: <strong id="ticketCode" class="selectable-text font-mono">TRX-XXXX</strong>
                 </div>
               </div>
               <div class="eticket-header-right">
-                <span class="eticket-badge-paid">PEMBAYARAN LUNAS</span>
-                <div class="eticket-worker-box no-print">
-                  <span class="eticket-worker-label">Worker Host</span>
+                <span class="eticket-badge-paid">&#10003; LUNAS / CONFIRMED</span>
+                <div class="eticket-worker-box no-print" style="opacity: 0.6; font-size: 10px;">
+                  <span class="eticket-worker-label">Audit Node</span>
                   <span id="ticketHostId" class="font-mono selectable-text eticket-worker-id">swarm-worker</span>
                 </div>
               </div>
@@ -2657,34 +2430,101 @@ function ensureSharedModals() {
             <div class="eticket-body">
               <div class="eticket-grid">
                 <div class="eticket-field">
-                  <span class="eticket-label">Detail Konser</span>
+                  <span class="eticket-label">Konser &amp; Lokasi</span>
                   <strong id="ticketConcert" class="eticket-value">-</strong>
                   <span id="ticketVenue" class="eticket-subvalue"></span>
                 </div>
                 <div class="eticket-field">
-                  <span class="eticket-label">Nama Penonton</span>
+                  <span class="eticket-label">Nama Pemegang Tiket</span>
                   <strong id="ticketBuyer" class="eticket-value selectable-text">-</strong>
                 </div>
                 <div class="eticket-field">
-                  <span class="eticket-label">Nomor Kursi</span>
+                  <span class="eticket-label">Nomor Kursi &amp; Kategori</span>
                   <strong id="ticketSeat" class="eticket-value eticket-seat-value">-</strong>
                 </div>
                 <div class="eticket-field">
-                  <span class="eticket-label">Total Bayar</span>
+                  <span class="eticket-label">Total Pembayaran</span>
                   <strong id="ticketPrice" class="eticket-value eticket-price-value">-</strong>
+                </div>
+                <div class="eticket-field" style="grid-column: 1 / -1;">
+                  <span class="eticket-label">Metode Pembayaran</span>
+                  <strong id="ticketPaymentMethod" class="eticket-value" style="font-size: 13.5px; color: #15803d;">QRIS Instan</strong>
                 </div>
               </div>
 
-              <div class="eticket-note">
-                <span class="eticket-verify-badge">STATUS: TERVERIFIKASI</span>
-                <span>Tiket terverifikasi valid secara atomic di Redis &amp; PostgreSQL. Harap tunjukkan saat masuk venue.</span>
+              <!-- Barcode & QR Visual Area -->
+              <div class="eticket-barcode-box">
+                <svg class="barcode-svg" viewBox="0 0 280 32" fill="currentColor">
+                  <rect x="0" y="0" width="3" height="32"/>
+                  <rect x="5" y="0" width="2" height="32"/>
+                  <rect x="9" y="0" width="4" height="32"/>
+                  <rect x="15" y="0" width="1" height="32"/>
+                  <rect x="18" y="0" width="3" height="32"/>
+                  <rect x="23" y="0" width="5" height="32"/>
+                  <rect x="30" y="0" width="2" height="32"/>
+                  <rect x="34" y="0" width="1" height="32"/>
+                  <rect x="37" y="0" width="4" height="32"/>
+                  <rect x="43" y="0" width="2" height="32"/>
+                  <rect x="47" y="0" width="3" height="32"/>
+                  <rect x="52" y="0" width="6" height="32"/>
+                  <rect x="60" y="0" width="2" height="32"/>
+                  <rect x="64" y="0" width="3" height="32"/>
+                  <rect x="69" y="0" width="1" height="32"/>
+                  <rect x="72" y="0" width="4" height="32"/>
+                  <rect x="78" y="0" width="2" height="32"/>
+                  <rect x="82" y="0" width="5" height="32"/>
+                  <rect x="89" y="0" width="2" height="32"/>
+                  <rect x="93" y="0" width="3" height="32"/>
+                  <rect x="98" y="0" width="1" height="32"/>
+                  <rect x="101" y="0" width="4" height="32"/>
+                  <rect x="107" y="0" width="2" height="32"/>
+                  <rect x="111" y="0" width="5" height="32"/>
+                  <rect x="118" y="0" width="3" height="32"/>
+                  <rect x="123" y="0" width="2" height="32"/>
+                  <rect x="127" y="0" width="4" height="32"/>
+                  <rect x="133" y="0" width="1" height="32"/>
+                  <rect x="136" y="0" width="5" height="32"/>
+                  <rect x="143" y="0" width="2" height="32"/>
+                  <rect x="147" y="0" width="4" height="32"/>
+                  <rect x="153" y="0" width="1" height="32"/>
+                  <rect x="156" y="0" width="3" height="32"/>
+                  <rect x="161" y="0" width="6" height="32"/>
+                  <rect x="169" y="0" width="2" height="32"/>
+                  <rect x="173" y="0" width="3" height="32"/>
+                  <rect x="178" y="0" width="4" height="32"/>
+                  <rect x="184" y="0" width="2" height="32"/>
+                  <rect x="188" y="0" width="5" height="32"/>
+                  <rect x="195" y="0" width="1" height="32"/>
+                  <rect x="198" y="0" width="4" height="32"/>
+                  <rect x="204" y="0" width="2" height="32"/>
+                  <rect x="208" y="0" width="5" height="32"/>
+                  <rect x="215" y="0" width="3" height="32"/>
+                  <rect x="220" y="0" width="1" height="32"/>
+                  <rect x="223" y="0" width="4" height="32"/>
+                  <rect x="229" y="0" width="2" height="32"/>
+                  <rect x="233" y="0" width="6" height="32"/>
+                  <rect x="241" y="0" width="2" height="32"/>
+                  <rect x="245" y="0" width="3" height="32"/>
+                  <rect x="250" y="0" width="1" height="32"/>
+                  <rect x="253" y="0" width="4" height="32"/>
+                  <rect x="259" y="0" width="2" height="32"/>
+                  <rect x="263" y="0" width="5" height="32"/>
+                  <rect x="270" y="0" width="2" height="32"/>
+                  <rect x="274" y="0" width="4" height="32"/>
+                </svg>
+                <div class="barcode-number">OFFICIAL VERIFIED ENTRY PASS &bull; SCAN AT GATE</div>
+              </div>
+
+              <div class="eticket-note" style="margin-top: 14px;">
+                <span class="eticket-verify-badge">&#128274; VERIFIKASI RESMI</span>
+                <span>Tunjukkan E-Ticket ini beserta kartu identitas (KTP/SIM/Paspor) asli di pintu masuk venue. Pintu dibuka 2 jam sebelum konser.</span>
               </div>
             </div>
           </div>
 
           <div class="modal-actions-row no-print eticket-actions">
             <button type="button" class="btn-pill-outline btn-pill-outline-dark" onclick="window.print()">
-              Cetak / PDF
+              Cetak / Simpan PDF
             </button>
             <button type="button" class="btn-pill-primary eticket-done-btn" onclick="closeWarModal()">
               Selesai &amp; Kembali ke Beranda
@@ -2763,7 +2603,6 @@ window.addEventListener('DOMContentLoaded', () => {
   pollHealth();
   setInterval(pollHealth, 5000);
 
-  initCarouselInteractions();
   populateFilterDropdowns();
   attachAutocomplete('searchInput', 'searchAutocomplete');
   initGlobalOverlayHandlers();
