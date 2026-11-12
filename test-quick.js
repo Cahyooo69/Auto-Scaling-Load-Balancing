@@ -1,12 +1,15 @@
 // Quick sanity test script: sends 20 concurrent checkout requests to the Load Balancer
+// Target can be local (http://localhost/tickets/buy) or production (https://wartiketkonser.id/tickets/buy)
 const http = require('http');
+const https = require('https');
 
 const TARGET_URL = process.env.TARGET_URL || 'http://localhost/tickets/buy';
+const client = TARGET_URL.startsWith('https') ? https : http;
 
 async function sendBuyRequest(id) {
   return new Promise((resolve) => {
     const start = Date.now();
-    const req = http.request(
+    const req = client.request(
       TARGET_URL,
       {
         method: 'POST',

@@ -1,163 +1,143 @@
 const express = require('express');
-const Redis = require('ioredis');
 const os = require('os');
 const path = require('path');
 
+const {
+  redis,
+  getIsRedisReady,
+  REDIS_HOST,
+  REDIS_PORT,
+  TICKET_KEY,
+  INITIAL_STOCK,
+  BUY_LUA_SCRIPT,
+  LOCK_SEAT_LUA_SCRIPT,
+  UNLOCK_SEAT_LUA_SCRIPT,
+  QUEUE_SYNC_LUA_SCRIPT,
+  mergeRedisSeatLocks,
+  releaseRedisCheckoutLock,
+} = require('./src/config/redis');
+
+const {
+  pool,
+  getIsDbReady,
+  checkDbConnection,
+  initDatabaseSchema,
+  DB_HOST,
+  DB_NAME,
+} = require('./src/config/db');
+
+const { createApiRouter } = require('./src/routes/api');
+
 const app = express();
-app.use(express.json());
-
 const PORT = process.env.PORT || 3000;
-const REDIS_HOST = process.env.REDIS_HOST || 'redis';
-const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
-const TICKET_KEY = 'concert:tickets:stock';
-const INITIAL_STOCK = parseInt(process.env.INITIAL_STOCK || '1000', 10);
 
-// shortcut: single Redis instance without sentinel/cluster, upgrade when Redis high-availability is required
-const redis = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-  enableOfflineQueue: false, // Throw error immediately when Redis is disconnected
-  maxRetriesPerRequest: 1,
-  retryStrategy: (times) => Math.min(times * 100, 2000),
-  lazyConnect: true
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Multi-Page SPA HTML routes
+const PAGE_ROUTES = [
+  { paths: ['/', '/index.html', '/konser', '/concerts.html', '/riwayat', '/kontak', '/contact.html', '/admin', '/admin.html', '/live-test', '/hasil-test'], file: 'index.html' },
+];
+PAGE_ROUTES.forEach(({ paths, file }) => {
+  app.get(paths, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', file));
+  });
 });
 
-// Atomic decrement Lua script: checks stock and decrements if > 0 in a single atomic transaction
-const BUY_LUA_SCRIPT = `
-  local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-  if current > 0 then
-    redis.call('DECR', KEYS[1])
-    return current - 1
-  else
-    return -1
-  end
-`;
-
-redis.defineCommand('atomicBuyTicket', {
-  numberOfKeys: 1,
-  lua: BUY_LUA_SCRIPT
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/svg+xml');
+  res.sendFile(path.join(__dirname, 'public', 'img', 'concert-fallback.svg'));
 });
 
-redis.on('error', (err) => {
-  // Suppress unhandled crash on connection attempts
-});
-
-redis.on('ready', async () => {
-  try {
-    const res = await redis.set(TICKET_KEY, INITIAL_STOCK, 'NX');
-    if (res === 'OK') {
-      console.log(`Initialized ticket stock to ${INITIAL_STOCK} on Redis ready`);
-    }
-  } catch (err) {
-    // Ignore error if connection is not ready
-  }
-});
-
-// Connect to Redis and initialize stock atomically if not already set
-async function initRedis() {
-  try {
-    await redis.connect();
-    console.log(`Connected to Redis at ${REDIS_HOST}:${REDIS_PORT}`);
-    const res = await redis.set(TICKET_KEY, INITIAL_STOCK, 'NX');
-    if (res === 'OK') {
-      console.log(`Initialized ticket stock to ${INITIAL_STOCK}`);
-    }
-  } catch (err) {
-    console.warn(`Redis connection failed: ${err.message}. Retrying in background...`);
-  }
-}
-
-// Helper for simulated artificial latency (50-100ms)
-const artificialDelay = () => {
-  const ms = Math.floor(Math.random() * 51) + 50; // 50 to 100ms
-  return new Promise((resolve) => setTimeout(resolve, ms));
-};
-
-// Simple web interface for live demo
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Healthcheck endpoint for Docker Swarm & Nginx
-app.get('/health', (req, res) => {
+// Health check endpoint for Docker Swarm, Nginx, & Monitoring
+app.get('/health', async (req, res) => {
+  const dbOk = await checkDbConnection();
   res.status(200).json({
     status: 'UP',
-    service: 'war-tiket-mock-api',
+    service: 'war-tiket-cloud-api',
     container: os.hostname(),
-    uptime: Math.floor(process.uptime())
+    redis: getIsRedisReady() ? 'CONNECTED' : 'DISCONNECTED',
+    database: dbOk ? 'CONNECTED' : 'DISCONNECTED',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Check current ticket status
-app.get('/tickets', async (req, res) => {
-  try {
-    const stock = await redis.get(TICKET_KEY);
-    res.json({
-      stock: parseInt(stock || '0', 10),
-      servedBy: os.hostname()
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to retrieve stock', message: err.message, servedBy: os.hostname() });
-  }
+// System info endpoint
+app.get('/api/system/info', async (req, res) => {
+  const dbOk = await checkDbConnection();
+  res.json({
+    serverInstance: os.hostname(),
+    architecture: 'Docker Swarm Multi-Replica Mesh',
+    platform: process.platform,
+    nodeVersion: process.version,
+    redis: {
+      status: getIsRedisReady() ? 'CONNECTED' : 'RECONNECTING',
+      host: REDIS_HOST,
+      port: REDIS_PORT,
+    },
+    database: {
+      status: dbOk ? 'CONNECTED' : 'RECONNECTING',
+      type: 'PostgreSQL 16',
+      host: DB_HOST,
+      name: DB_NAME,
+      poolTotal: pool.totalCount,
+      poolIdle: pool.idleCount,
+      poolWaiting: pool.waitingCount,
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Reset ticket stock (for repeatable test runs & live demo)
-app.post('/tickets/reset', async (req, res) => {
-  try {
-    const raw = req.body?.stock ?? req.query?.stock;
-    const stock = raw !== undefined ? parseInt(raw, 10) : INITIAL_STOCK;
-    await redis.set(TICKET_KEY, stock);
-    res.json({
-      message: `Stock successfully reset to ${stock}`,
-      stock,
-      servedBy: os.hostname()
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to reset stock', message: err.message });
+// Wire modular API router
+const { router: apiRouter, ticketController } = createApiRouter({
+  pool,
+  redis,
+  port: PORT,
+  getDbReady: getIsDbReady,
+  checkDbConnection,
+  getRedisReady: getIsRedisReady,
+});
+app.use('/api', apiRouter);
+
+// Backward-compatible root endpoint aliases
+app.get('/tickets', ticketController.getTicketStatus);
+app.post('/tickets/buy', ticketController.buyTicket);
+app.post('/tickets/reset', ticketController.resetTickets);
+
+// Catch-all SPA fallback: direct unknown UI routes render index.html without 404 (API/missing assets return 404 JSON)
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/tickets/') || /\.[a-z0-9]{2,5}$/i.test(req.path)) {
+    return res.status(404).json({ success: false, error: 'Not Found' });
   }
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Atomic checkout / war tiket purchase
-app.post('/tickets/buy', async (req, res) => {
-  try {
-    // Simulate real-world database/validation artificial delay (50-100ms)
-    await artificialDelay();
-
-    // Atomic checkout execution via Redis Lua script
-    const remaining = await redis.atomicBuyTicket(TICKET_KEY);
-
-    if (remaining >= 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'Tiket berhasil didapatkan!',
-        remainingStock: remaining,
-        servedBy: os.hostname(),
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    return res.status(409).json({
-      success: false,
-      message: 'War tiket selesai: Tiket sudah habis terjual!',
-      remainingStock: 0,
-      servedBy: os.hostname(),
-      timestamp: new Date().toISOString()
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: 'Checkout failure',
-      message: err.message,
-      servedBy: os.hostname()
-    });
-  }
-});
-
+// Boot server
 if (require.main === module) {
-  initRedis();
-  app.listen(PORT, () => {
-    console.log(`War Tiket Mock API listening on port ${PORT} [Container: ${os.hostname()}]`);
+  redis.connect().catch((e) => {
+    console.warn(`[Redis] Connect warning: ${e.message}`);
   });
+
+  initDatabaseSchema().catch((e) => {
+    console.warn(`[Database] Boot init warning: ${e.message}`);
+  });
+
+  const httpServer = app.listen(PORT, () => {
+    console.log(`War Tiket Cloud API listening on port ${PORT} [Container: ${os.hostname()}]`);
+  });
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
 }
 
-module.exports = { app, BUY_LUA_SCRIPT };
+module.exports = {
+  app,
+  BUY_LUA_SCRIPT,
+  LOCK_SEAT_LUA_SCRIPT,
+  UNLOCK_SEAT_LUA_SCRIPT,
+  QUEUE_SYNC_LUA_SCRIPT,
+  pool,
+  redis,
+  mergeRedisSeatLocks,
+  releaseRedisCheckoutLock,
+};

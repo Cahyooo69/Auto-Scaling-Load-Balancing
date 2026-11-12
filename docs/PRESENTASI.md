@@ -88,24 +88,28 @@ docker service ps wartiket_app
 
 ---
 
-### Langkah Demo 4: Demo Disaster Recovery & Failover (1 Menit)
-Tunjukkan ketahanan sistem saat ada crash mendadak:
-```bash
-# Ambil salah satu ID container worker
-docker ps --filter "name=wartiket_app" --format "{{.ID}}"
+### Langkah Demo 4: Demo Disaster Recovery & Ketahanan Gangguan (Revisi Dosen)
+Tunjukkan ketahanan sistem saat terjadi gangguan fatal pada berbagai komponen:
 
-# Matikan 2 container secara paksa
-docker rm -f <PASTE_CONTAINER_ID_1> <PASTE_CONTAINER_ID_2>
-```
-Jalankan kembali tes request segera setelah mematikan container:
+**4.1. Uji Gangguan Nginx Mati (High Availability):**
 ```bash
-node test-quick.js
+# Matikan paksa 1 container Nginx
+docker rm -f $(docker ps -q -f name=wartiket_nginx | Select-Object -First 1)
+
+# Buktikan port 80 tetap merespon instan (0ms downtime) karena dialihkan ke Nginx replika 2
+curl -I http://localhost/health
 ```
-Dan cek status Swarm:
+> *Poin bicara:* "Bisa kita lihat, meski satu container Nginx dimatikan paksa, website dan API tetap merespon tanpa jeda karena Nginx berjalan dengan 2 replika paralel di balik Ingress Routing Mesh."
+
+**4.2. Uji Gangguan Redis Mati (AOF Volume Persistence):**
 ```bash
-docker service ps wartiket_app
+# Matikan paksa container Redis
+docker rm -f $(docker ps -q -f name=wartiket_redis | Select-Object -First 1)
+
+# Cek bahwa backend tidak crash dan kuota tiket tetap utuh saat Redis pulih
+curl http://localhost/tickets
 ```
-> *Poin bicara:* "Meskipun 2 container worker dimatikan secara paksa, transaksi tetap sukses 100% tanpa error, dan Docker Swarm secara otomatis memunculkan container baru sebagai mekanisme *self-healing* (*Recovery Time Objective* mendekati nol)."
+> *Poin bicara:* "Ketika Redis dimatikan, backend tidak mengalami unhandled crash. Begitu Redis auto-restart dalam 1–2 detik, berkat AOF Volume disk, kuota tiket yang tersisa tidak hilang sama sekali."
 
 ---
 
@@ -134,3 +138,9 @@ Berikut prediksi pertanyaan umum dosen Cloud Computing beserta jawaban taktis:
 ### Q4: *"Bagaimana sistem menangani failover saat container mati mendadak?"*
 **Jawaban:**
 > "Docker Swarm memiliki *healthcheck* bawaan dan *reconciling loop*. Swarm memantau status setiap task. Jika sebuah task mati mendadak, IPVS Swarm langsung mencoret IP task tersebut dari daftar upstream sehat agar tidak menerima trafik baru, sementara kontroler Swarm langsung membuat task pengganti untuk memenuhi target replika (misalnya tetap 8)."
+
+---
+
+### Q5: *"Bagaimana jika Nginx atau Redis yang mati, bukan hanya worker backend?" (Poin Revisi)*
+**Jawaban:**
+> "Untuk Nginx, kami telah mengimplementasikan **2 replika aktif (High Availability)** pada port 80. Jika salah satu container Nginx crash, Swarm Ingress Mesh langsung membelokkan trafik ke replika kedua tanpa downtime (0ms downtime). Untuk Redis, kami menggunakan **Docker Persistent Volume (AOF)** dan penanganan *graceful degradation* di backend Node.js, sehingga data tiket tidak akan hilang dan sistem langsung pulih otomatis saat container Redis kembali online."

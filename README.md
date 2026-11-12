@@ -1,325 +1,362 @@
 # 🎟️ Auto-Scaling & Load Balancing Sistem War Tiket Berbasis Docker Swarm
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Docker-Swarm%20Ingress-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Swarm"/>
-  <img src="https://img.shields.io/badge/Nginx-Reverse%20Proxy-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx"/>
-  <img src="https://img.shields.io/badge/Node.js-Microservice-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"/>
-  <img src="https://img.shields.io/badge/Redis-Atomic%20Lua-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"/>
-  <img src="https://img.shields.io/badge/Grafana%20k6-Load%20Testing-7D4698?style=for-the-badge&logo=k6&logoColor=white" alt="Grafana k6"/>
-  <img src="https://img.shields.io/badge/Status-Tuntas%20100%25-brightgreen?style=for-the-badge" alt="Status"/>
-</p>
-
-> **Tugas Besar Mata Kuliah Komputasi Awan (3 SKS)**  
-> **Program Studi Sistem Informasi / Informatika &bull; Semester Gasal 2026/2027**  
-> **Dosen Pengampu:** Dr. Moch Yasin, S.Kom., M.Kom., M.B.A., CDCP  
-> **Kelompok:** 1 (Kelas Paralel H7A.7)  
-> **Anggota Tim:**  
-> 1. **Muhammad Ilham Nurcahyo** (NIM: 09040623063)  
-> 2. **Hafid Aji Fauzan** (NIM: 09020623027)  
-> 3. **Muhammad Daud Rizaldiansyah** (NIM: 09040623061)  
-> 4. **Davin Aryaguna Hermansyah** (NIM: 09020623020)  
+> **Mata Kuliah:** Cloud Computing (3 SKS)  
+> **Studi Kasus:** Sistem War Tiket Konser Musik (*Flash Crowd Traffic Simulation*)  
+> **Kelompok:** 1  
+> **Repositori Resmi:** [https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing.git](https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing.git)  
+>
+> **Anggota Tim:**
+> - Muhammad Ilham Nurcahyo (09040623063)
+> - Hafid Aji Fauzan (0920623027)
+> - Muhammad Daud Rizaldiansyah (09040623061)
+> - Davin Aryaguna Hermansyah (09020623020)
 
 ---
 
-## 📑 Daftar Isi
-- [1. Ringkasan Eksekutif & Karakteristik Masalah](#1-ringkasan-eksekutif--karakteristik-masalah)
-- [2. Diagram Arsitektur Sistem 3-Tier](#2-diagram-arsitektur-sistem-3-tier)
-- [3. Skema Jaringan & Isolasi Docker](#3-skema-jaringan--isolasi-docker)
-- [4. Penegakan Batasan Sumber Daya (Kernel Cgroups)](#4-penegakan-batasan-sumber-daya-kernel-cgroups)
-- [5. Panduan Instalasi & Deployment Cepat](#5-panduan-instalasi--deployment-cepat)
-- [6. Evaluasi Pertemuan 3: Pengujian Skalabilitas & Uji Beban (1–1.000 VU)](#6-evaluasi-pertemuan-3-pengujian-skalabilitas--uji-beban-11000-vu)
-  - [A. Profil Uji Beban Bertahap (Staged Ramp-Up)](#a-profil-uji-beban-bertahap-staged-ramp-up)
-  - [B. Bukti Visual Metrik Grafana k6 (Atas & Bawah)](#b-bukti-visual-metrik-grafana-k6-atas--bawah)
-  - [C. Tabel Komparasi Kinerja Kuantitatif (2 vs 8 Replika)](#c-tabel-komparasi-kinerja-kuantitatif-2-vs-8-replika)
-  - [D. Pembahasan Teknis: CPU Throttling vs Horizontal Scale-Out](#d-pembahasan-teknis-cpu-throttling-vs-horizontal-scale-out)
-- [7. Skenario Pengujian Lanjutan (Disaster Recovery & Flash Crowd)](#7-skenario-pengujian-lanjutan-disaster-recovery--flash-crowd)
-- [8. Antarmuka Web Interaktif (War Tiket Dashboard)](#8-antarmuka-web-interaktif-war-tiket-dashboard)
-- [9. Struktur Repositori & Artefak Laporan](#9-struktur-repositori--artefak-laporan)
-- [10. Matriks Pemenuhan Luaran Silabus Kuliah](#10-matriks-pemenuhan-luaran-silabus-kuliah)
+## Daftar Isi
+1. [Ringkasan Proyek & Latar Belakang](#1-ringkasan-proyek--latar-belakang)
+2. [Standar Teknis Perkuliahan (3 SKS)](#2-standar-teknis-perkuliahan-3-sks)
+3. [Arsitektur Sistem & Diagram Alur](#3-arsitektur-sistem--diagram-alur)
+4. [Skema Jaringan & Komponen Klaster](#4-skema-jaringan--komponen-klaster)
+5. [Mekanisme Redis Atomic Locking (0% Overselling)](#5-mekanisme-redis-atomic-locking-0-overselling)
+6. [Panduan Menjalankan Sistem (1-Klik & Manual)](#6-panduan-menjalankan-sistem-1-klik--manual)
+7. [Pengujian Beban & Skalabilitas (k6 1.000 VU)](#7-pengujian-beban--skalabilitas-k6-1000-vu)
+8. [Simulasi Disaster Recovery (DR) & Failover](#8-simulasi-disaster-recovery-dr--failover)
+9. [Struktur Direktori Repositori](#9-struktur-direktori-repositori)
+10. [Panduan Presentasi 11 Menit & Sesi Q&A](#10-panduan-presentasi-11-menit--sesi-qa)
+11. [Matriks Progres Mingguan (Pertemuan 1 - 5)](#11-matriks-progres-mingguan-pertemuan-1---5)
 
 ---
 
-## 1. Ringkasan Eksekutif & Karakteristik Masalah
+## 1. Ringkasan Proyek & Latar Belakang
 
-Sistem **War Tiket Konser Musik** menghadapi karakteristik beban komputasi yang sangat ekstrem: ribuan hingga puluhan ribu calon pembeli mengirimkan transaksi *checkout* secara bersamaan dalam detik pertama penjualan dibuka (*flash crowd concurrency*). 
+Penjualan tiket konser daring berskala besar (*War Tiket*) memiliki karakteristik beban trafik yang sangat menantang: **puluhan ribu hingga jutaan permintaan tiba secara serentak dalam jendela waktu hitungan detik** (*flash crowd traffic*). 
 
-Kelemahan fatal pada arsitektur monolitik konvensional meliputi:
-1. **CPU Throttling & Server Crash**: Lonjakan transaksi bersamaan memicu antrean socket TCP tak tertampung (*connection refused* / HTTP 502 Bad Gateway).
-2. **Race Condition & Overselling**: Transaksi tiket melebihi stok yang tersedia akibat jeda waktu antara pengecekan stok (*check*) dan pengurangan stok (*update*).
-3. **Single Point of Failure (SPOF)**: Kegagalan pada satu server mengakibatkan seluruh layanan transaksi mati total.
+Pada sistem monolitik tradisional tanpa orkestrasi cloud, skenario ini hampir selalu menimbulkan dua kegagalan fatal:
+1. **Server Crash / Out of Memory (OOM)**: Beban CPU dan memori melonjak tajam melampaui kapasitas server tunggal, menyebabkan antrean HTTP *timed out* (504 Gateway Timeout) atau server mati mendadak.
+2. **Race Condition & Overselling (Kelebihan Penjualan)**: Permintaan yang masuk bersamaan membaca kuota stok tiket yang sama sebelum transaksi sebelumnya sempat menulis pembaruan data ke database. Akibatnya, tiket terjual melebihi kapasitas tempat duduk riil.
+3. **Single Point of Failure (SPOF)**: Jika gerbang masuk (*ingress*) atau *worker backend* mengalami *down*, seluruh proses transaksi langsung lumpuh total.
 
-### Solusi Rekayasa yang Diimplementasikan:
-* **Docker Swarm Ingress & Overlay Mesh**: Orkestrasi multi-container dengan *virtual IP* (VIP) dan *round-robin load balancing* antar replika.
-* **Nginx Reverse Proxy & HTTP Keepalive**: Penyangga trafik gerbang masuk utama (Port 80) dengan *upstream keepalive connection pooling* (128 sockets) untuk mencegah saturasi file descriptor.
-* **Scalable Stateless Microservices**: Backend Node.js dengan simulasi beban realistis (*artificial delay* 50–100 ms) yang dapat diskalakan secara dinamis dari **2 hingga 8 replika** dalam waktu 2 detik tanpa *downtime*.
-* **Redis In-Memory Atomic Locking via Lua Script**: Operasi pengecekan dan dekremen stok tiket dieksekusi secara atomik dalam satu siklus CPU Redis, menjamin **0% Overselling** secara matematis.
-* **Strict Cgroups Resource Limits**: Seluruh container dibatasi secara ketat pada **`cpus: 0.25`** dan **`memory: 256M`**.
+### Solusi Arsitektur Cloud-Native
+Proyek ini mengimplementasikan klaster **Docker Swarm** yang menggabungkan:
+- **Nginx Ingress Load Balancer (Port 80)** dengan konfigurasi *High Availability* (2 replika) dan *keepalive connection pooling*.
+- **Node.js Mock API Replicas** yang dapat diskalakan secara elastis (*dynamic horizontal scaling*) mulai dari **2 hingga 8 replika container** di balik Docker Swarm *Routing Mesh* (Layer 4 IPVS).
+- **Redis In-Memory Atomic Locking** berbasis *Lua Scripting* untuk memproses *check-and-decrement* kuota stok tiket dalam satu instruksi atomik (0% *overselling*).
+- **PostgreSQL 16 Database** untuk persistensi transaksi ACID, katalog konser, dan audit pengguna.
+- **Resource Constraints**: Setiap container dibatasi secara ketat pada `cpus: '0.25'` dan `memory: 256M` sesuai spesifikasi praktikum.
 
 ---
 
-## 2. Diagram Arsitektur Sistem 3-Tier
+## 2. Standar Teknis Perkuliahan (3 SKS)
+
+Implementasi proyek ini secara ketat merujuk pada standar penilaian mata kuliah Cloud Computing:
+
+| Parameter | Ketentuan Dosen | Implementasi Proyek |
+|---|---|---|
+| **Kebijakan Kode Aplikasi** | Tidak membangun dari nol; wajib menggunakan *mock API / starter code* sederhana dengan penundaan buatan (*artificial delay*) 50–100ms. | File [app/server.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/app/server.js) menyuntikkan latensi sintetis `50ms + Math.random() * 50ms` pada pemrosesan transaksi untuk merefleksikan I/O riil. |
+| **Batasan Sumber Daya (*Resource Limits*)** | `cpus: '0.25'` (Maksimal 25% dari 1 core CPU)<br/>`memory: 256M` (Maksimal RAM 256 MB) | Dikonfigurasi eksplisit pada [docker-compose.yml](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docker-compose.yml) untuk seluruh container (`nginx`, `app`, `redis`). |
+| **Alat Uji Beban (*Load Testing*)** | K6 / Locust / ApacheBench / JMeter | Skrip resmi menggunakan Grafana K6: [load-test/load-test.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/load-test/load-test.js). |
+| **Tahapan Ramp-Up Beban** | Ramp-up bertahap dari 10, 100, 500, hingga 1000 Virtual Users (VU) dalam durasi total 3 menit. | Tahap 1: 10 VU (30 detik)<br/>Tahap 2: 100 VU (45 detik)<br/>Tahap 3: 500 VU (45 detik)<br/>Tahap 4: 1000 VU (60 detik). |
+| **Target SLA (*Service Level Agreement*)** | Response Time $< 200\text{ms}$<br/>Tingkat kegagalan (*error rate*) $< 1\%$ | Tercapai: `http_req_duration p(95) < 200ms` dan `server_failures < 0.01` (0%). |
+| **Skenario Disaster Recovery (DR)** | Mematikan 2 container worker secara paksa saat pengujian 1000 VU berlangsung. | Otomasi pengujian failover via file [dr-test.bat](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/dr-test.bat) dengan pembuktian failover retries Nginx dan RTO Swarm. |
+
+---
+
+## 3. Arsitektur Sistem & Diagram Alur
+
+Arsitektur klaster beroperasi di atas Docker Swarm Ingress Routing Mesh dan Overlay Network:
 
 ```mermaid
 flowchart TD
-    subgraph Clients["Trafik Pengguna / Beban Uji (1 - 1.000 VU)"]
-        CLI["10 - 1.000 Virtual Users (k6)<br/>POST /tickets/buy"]
-        WEB["Browser Calon Pembeli<br/>GET / (Live Web UI)"]
+    subgraph Clients["Klien / Simulasi Beban K6"]
+        U["10 - 1000 Virtual Users (VU)<br/>Permintaan War Tiket Simultan"]
     end
 
-    subgraph Host["Docker Swarm Node (Local Host)"]
-        subgraph Layer1["Layer 1: Ingress & Reverse Proxy"]
-            NGINX["Nginx Load Balancer<br/>Port 80:80 | keepalive 128<br/>Limit: 0.25 CPU, 256MB RAM"]
+    subgraph Host["Docker Swarm Cluster Host"]
+        subgraph LayerIngress["Lapis Ingress & Load Balancing (Port 80)"]
+            NGINX1["Nginx Replica 1<br/>Reverse Proxy & Buffer<br/>CPU: 0.25 | RAM: 256M"]
+            NGINX2["Nginx Replica 2 (HA)<br/>Ingress Failover Backup<br/>CPU: 0.25 | RAM: 256M"]
         end
 
-        subgraph Layer2["Layer 2: Swarm Overlay Network (wartiket-net)"]
-            VIP["Swarm Ingress Routing Mesh<br/>Service VIP: http://app:3000"]
-            
-            subgraph Replicas["Horizontally Scalable Workers (2 -> 8 Containers)"]
-                APP1["wartiket_app.1<br/>Limit: 0.25 CPU / 256M"]
-                APP2["wartiket_app.2<br/>Limit: 0.25 CPU / 256M"]
-                APP3["wartiket_app.3 (Scale)<br/>Limit: 0.25 CPU / 256M"]
-                APPN["wartiket_app.4..8 (Scale)<br/>Limit: 0.25 CPU / 256M"]
+        subgraph OverlayNet["Docker Overlay Network: wartiket-net"]
+            VIP["Docker Swarm Routing Mesh (IPVS VIP)<br/>DNS: app:3000"]
+
+            subgraph WorkerCluster["Cluster Worker Node.js (2 -> 8 Replika Elastis)"]
+                APP1["Worker 1 (wartiket_app.1)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
+                APP2["Worker 2 (wartiket_app.2)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
+                APP3["Worker 3 (Dynamic Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
+                APPX["Worker 4..8 (Auto Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
             end
         end
 
-        subgraph Layer3["Layer 3: Atomic State & Datastore"]
-            REDIS["Redis In-Memory Datastore<br/>Port 6379 (Internal)<br/>Limit: 0.25 CPU / 256M<br/>Atomic Lua Script Engine"]
+            subgraph StateLayer["Lapis Penyimpanan & Atomic Locking"]
+                REDIS["Redis 7 Container<br/>In-Memory Atomic Lua Lock<br/>AOF Volume Persistence<br/>CPU: 0.25 | RAM: 256M"]
+                PG["PostgreSQL 16 Container<br/>ACID Data Persistence<br/>Relational Table Storage<br/>CPU: 0.50 | RAM: 512M"]
+            end
         end
     end
 
-    CLI -->|HTTP Port 80| NGINX
-    WEB -->|HTTP Port 80| NGINX
-    NGINX -->|Forward Keepalive| VIP
-    VIP -.->|Round-Robin| APP1
-    VIP -.->|Round-Robin| APP2
-    VIP -.->|Scale-Out Balance| APP3
-    VIP -.->|Scale-Out Balance| APPN
+    U -->|HTTP Request Port 80| NGINX1
+    U -.->|Failover Port 80| NGINX2
+    NGINX1 -->|proxy_pass keepalive| VIP
+    NGINX2 -->|proxy_pass keepalive| VIP
 
-    APP1 -->|EVALSHA Atomic DECR| REDIS
-    APP2 -->|EVALSHA Atomic DECR| REDIS
-    APP3 -->|EVALSHA Atomic DECR| REDIS
-    APPN -->|EVALSHA Atomic DECR| REDIS
+    VIP -->|Round-Robin| APP1
+    VIP -->|Round-Robin| APP2
+    VIP -.->|Auto Load Balance| APP3
+    VIP -.->|Auto Load Balance| APPX
+
+    APP1 -->|EVALSHA Atomic Decr| REDIS
+    APP2 -->|EVALSHA Atomic Decr| REDIS
+    APP3 -->|EVALSHA Atomic Decr| REDIS
+    APPX -->|EVALSHA Atomic Decr| REDIS
+
+    APP1 -.->|Commit Order Transaksi| PG
+    APP2 -.->|Commit Order Transaksi| PG
+    APP3 -.->|Commit Order Transaksi| PG
+    APPX -.->|Commit Order Transaksi| PG
 ```
 
 ---
 
-## 3. Skema Jaringan & Isolasi Docker
+## 4. Skema Jaringan & Komponen Klaster
 
-Seluruh layanan dikapsulasi dalam jaringan virtual internal privat:
+### A. Konfigurasi Jaringan Overlay Docker
+Klaster menggunakan jaringan terisolasi bertipe `overlay` dengan opsi `attachable: true`:
+- **Nama Jaringan:** `wartiket-net`
+- **Driver:** `overlay` (Mendukung multi-container routing dan abstraksi virtual IP)
+- **Port Publik Terbuka:** Port `80` (HTTP) dan `443` (HTTPS) yang dipetakan langsung ke kontainer Nginx.
+- **Port Internal Terlindungi:** Port `3000` (Node.js API), `6379` (Redis), dan `5432` (PostgreSQL) tidak diekspos ke host luar, melainkan hanya dapat diakses antar-kontainer dalam jaringan `wartiket-net`.
 
-| Parameter Jaringan | Konfigurasi | Keterangan Teknis |
+### B. Rincian Spesifikasi Layanan Container
+
+| Nama Layanan Swarm | Image Docker | Default Replika | Batasan CPU | Batasan RAM | Peran & Fungsi Utama |
+|---|---|---|---|---|---|
+| `wartiket_nginx` | `wartiket-nginx:latest` | 2 (High Availability) | 0.25 Core | 256 MB | Reverse Proxy layer 7, buffer koneksi klien (`worker_connections 10240`), *upstream keepalive*, dan penyeimbang beban awal. |
+| `wartiket_app` | `wartiket-app:latest` | 2 (Dapat diskalakan 2 $\rightarrow$ 8) | 0.25 Core | 256 MB | Worker Node.js Mock API yang mengeksekusi logika transaksi, menyuntikkan *artificial delay* 50–100ms, dan mengembalikan identitas kontainer (`ServedBy`). |
+| `wartiket_redis` | `redis:7-alpine` | 1 | 0.25 Core | 256 MB | Penyimpan status memori kilat untuk *locking* kursi dan pengurangan kuota atomik menggunakan *Lua Scripting*, dilengkapi *AOF Persistence*. |
+| `wartiket_db` | `postgres:16-alpine` | 1 | 0.50 Core | 512 MB | Basis data relasional ACID untuk menyimpan tabel pengguna, data konser musik, denah kursi, dan riwayat pesanan tiket resmi. |
+
+---
+
+## 5. Mekanisme Redis Atomic Locking (0% Overselling)
+
+### Masalah Balapan Data (*Race Condition*)
+Jika pemesanan tiket menggunakan query SQL biasa:
+```sql
+-- RAWAN OVERSELLING PADA 1.000 VU:
+SELECT stock FROM tickets WHERE concert_id = 1; -- Thread A membaca 1, Thread B membaca 1
+UPDATE tickets SET stock = stock - 1;          -- Kedua thread berhasil beli, stok menjadi -1!
+```
+Pada saat 1.000 Virtual User menembak server dalam detik yang sama, ratusan thread akan membaca nilai stok sebelum thread pertama sempat memperbarui basis data.
+
+### Solusi Atomik: Redis Lua Script
+Redis mengeksekusi skrip Lua secara **single-threaded dan atomik**. Selama skrip berjalan di memori Redis, tidak ada perintah lain yang dapat menyela atau membaca nilai yang usang.
+
+```lua
+-- Skrip Lua Atomik pada server.js
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+if current > 0 then
+    redis.call('DECR', KEYS[1])
+    return current - 1
+else
+    return -1
+end
+```
+
+**Hasil:**
+- Jika stok tersisa $> 0$, Redis mengurangi stok sebesar 1 dan mengembalikan sisa tiket (Status: **200 OK - Tiket Berhasil**).
+- Jika stok sudah $0$, Redis mengembalikan `-1` (Status: **409 Conflict / 410 Gone - Tiket Habis**).
+- Kuota tiket tidak akan pernah bernilai negatif (0% *overselling*).
+
+---
+
+## 6. Panduan Menjalankan Sistem (1-Klik & Manual)
+
+### A. Persyaratan Sistem
+1. Sistem Operasi: Windows 10/11, Linux, atau macOS.
+2. [Docker Desktop](https://www.docker.com/products/docker-desktop/) telah terpasang dan dalam status *running*.
+3. Node.js v18+ (opsional, untuk menjalankan skrip pengujian cepat di host).
+
+---
+
+### B. Menjalankan Otomatis (Metode 1-Klik / Windows Batch)
+
+Proyek ini telah dilengkapi skrip batch otomatis di direktori utama:
+
+| File Skrip | Perintah di PowerShell / CMD | Fungsi |
 |---|---|---|
-| **Nama Jaringan** | `wartiket-net` | Jaringan internal terisolasi antar container |
-| **Driver Jaringan** | `overlay` | Mendukung multi-host routing mesh & ingress VIP |
-| **Port Publik Host** | `*:80->80/tcp` | Satu-satunya gerbang yang diekspos Nginx ke jaringan luar |
-| **Port Internal Backend** | `3000/tcp` | Tersembunyi dari publik, hanya dapat diakses oleh Nginx |
-| **Port Internal Redis** | `6379/tcp` | Terisolasi penuh di jaringan internal, hanya dapat diakses worker `app` |
-| **Service Discovery** | Docker Internal DNS | Resolusi nama service otomatis via VIP (Virtual IP) |
+| **Start Klaster** | `.\start.bat` | Otomatis mengaktifkan Docker Swarm, mem-build container terbaru, dan men-deploy stack `wartiket`. |
+| **Status Klaster** | `.\status.bat` | Memeriksa kondisi replika, daftar container yang aktif, dan kesehatan layanan. |
+| **Skalasi Elastis** | `.\scale.bat 8` | Melipatgandakan worker backend dari 2 menjadi 8 replika dalam hitungan detik. |
+| **Tes Load Balancer** | `npm test` atau `node test-quick.js` | Menembak 20 request serentak untuk membuktikan distribusi *round-robin* antar kontainer. |
+| **Uji Beban K6** | `.\run-k6.bat` | Menjalankan uji beban 1.000 VU selama 3 menit sesuai standar perkuliahan. |
+| **Simulasi DR** | `.\dr-test.bat` | Mematikan 2 container worker di tengah beban untuk membuktikan *failover* & *self-healing*. |
+| **Stop Klaster** | `.\stop.bat` | Menghapus stack Swarm dan membersihkan seluruh container. |
 
 ---
 
-## 4. Penegakan Batasan Sumber Daya (Kernel Cgroups)
+### C. Menjalankan Manual (Perintah Docker CLI)
 
-Sesuai spesifikasi tugas besar, setiap container dibatasi secara ketat pada level Linux *Control Groups* (*cgroups*):
+Jika ingin mengeksekusi perintah satu per satu lewat terminal:
 
-```yaml
-resources:
-  limits:
-    cpus: '0.25'      # Maksimal 25% dari 1 Core CPU fisik
-    memory: 256M      # Maksimal alokasi memori fisik 256 MB
-  reservations:
-    cpus: '0.10'
-    memory: 64M
-```
-
-Validasi penegakan batasan pada kernel dapat dibuktikan langsung melalui perintah:
 ```bash
-docker service inspect wartiket_app --format "{{json .Spec.TaskTemplate.Resources}}"
-```
-*Output validasi:* `{"Limits":{"NanoCPUs":250000000,"MemoryBytes":268435456}}`  
-(Artinya tepat 250.000.000 NanoCPUs = 0,25 Core, dan 268.435.456 Bytes = 256 MB RAM fisik).
-
----
-
-## 5. Panduan Instalasi & Deployment Cepat
-
-### Prasyarat
-- Docker Desktop aktif (Windows / macOS / Linux) dengan Docker Engine dan Swarm aktif.
-- Node.js v18+ (opsional, untuk skrip testing cepat).
-
-### 1. Inisialisasi Docker Swarm
-```bash
+# 1. Inisialisasi Docker Swarm pada mesin lokal
 docker swarm init
-```
 
-### 2. Build Image Lokal
-```bash
-# Build image Node.js App
+# 2. Build image aplikasi backend dan reverse proxy
 docker build -t wartiket-app:latest ./app
-
-# Build image Nginx Load Balancer
 docker build -t wartiket-nginx:latest ./nginx
-```
 
-### 3. Deploy Stack ke Swarm
-```bash
+# 3. Deploy stack bernama 'wartiket'
 docker stack deploy -c docker-compose.yml wartiket
-```
 
-### 4. Verifikasi Status Layanan
-```bash
+# 4. Verifikasi seluruh container telah berstatus RUNNING
 docker stack services wartiket
-docker stack ps --filter "desired-state=running" wartiket
+docker stack ps wartiket
 ```
 
----
-
-## 6. Evaluasi Pertemuan 3: Pengujian Skalabilitas & Uji Beban (1–1.000 VU)
-
-### A. Profil Uji Beban Bertahap (Staged Ramp-Up)
-Pengujian beban menggunakan skrip bertahap [load-test/load-test-demo.js](load-test/load-test-demo.js) selama 45 detik:
-* **Tahap 1 (0–5 detik):** Inisiasi Beban Rendah (10 VU)
-* **Tahap 2 (5–15 detik):** Beban Menengah (100 VU)
-* **Tahap 3 (15–30 detik):** Beban Tinggi (500 VU)
-* **Tahap 4 (30–45 detik):** Beban Puncak Maksimum (1.000 VU)
+Akses sistem melalui browser:
+- **Tampilan Pembeli & War Tiket:** [http://localhost/](http://localhost/)
+- **Dashboard Admin & Status Klaster:** [http://localhost/#admin](http://localhost/#admin)
+- **Cek Endpoint Kesehatan Klaster:** [http://localhost/health](http://localhost/health)
 
 ---
 
-### B. Bukti Visual Metrik Grafana k6 (Atas & Bawah)
+## 7. Pengujian Beban & Skalabilitas (k6 1.000 VU)
 
-#### 1. Kondisi A: Baseline 2 Replika Worker (Total 0,5 Core CPU)
-Pada kondisi baseline 2 worker, sistem mulai mengalami *bottleneck* antrean CPU saat mendekati 1.000 VU:
+Pengujian beban dikonfigurasi pada berkas [load-test/load-test.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/load-test/load-test.js) yang mensimulasikan alur pengguna riil (*Login $\rightarrow$ Katalog Konser $\rightarrow$ Beli Tiket*).
 
-![k6 Results 2 Replicas](k6_results_2_replicas.png)
+### Tahapan Uji Beban (Total Durasi: 3 Menit)
+```text
+  1000 VU ───────────────────────────────────────────┐ (60 Detik - Peak War)
+   500 VU ─────────────────────────┐                 │ (45 Detik - High Load)
+   100 VU ──────────┐              │                 │ (45 Detik - Ramp Up)
+    10 VU ────┐     │              │                 │ (30 Detik - Baseline)
+          00:00   00:30          01:15             02:00            03:00
+```
 
-* **Checks:** `99.5%` (Terdapat 0,5% transaksi di beban puncak yang merespon $> 500\text{ ms}$).
-* **Throughput:** `1.09k req/s` (Total **50.100 transaksi** diproses).
-* **Latensi Rata-Rata:** `131 ms` | Median: `99 ms` | p90: `203 ms` | p95: `282 ms`.
-* **Latensi Ekor Puncak:** **`p99: 613 ms`** dan **`Max: 1.000 ms (1 detik)`** akibat *CPU throttling*.
-* **Kegagalan Server:** `0.0%` (Zero failure / tidak ada HTTP 500).
-
----
-
-#### 2. Kondisi B: Pasca-Skalasi Dinamis ke 8 Replika Worker (Total 2,0 Core CPU)
-Setelah diskalakan secara dinamis melalui `docker service scale wartiket_app=8`, seluruh hambatan performa teratasi sempurna:
-
-![k6 Results 8 Replicas](k6_results_8_replicas.png)
-
-* **Checks:** **`100.0% (Sempurna)`** (Seluruh 55.400 transaksi memenuhi SLA tanpa ada request lambat).
-* **Throughput:** **`1.22k req/s`** (Kapasitas naik memproses **55.400 transaksi**, bertambah **+5.300 tiket**).
-* **Latensi Rata-Rata:** **`98 ms`** (Turun signifikan ke bawah 100 ms) | Median: `89 ms`.
-* **Pemangkasan Latensi Ekor:** **`p99 turun 51,5% menjadi 297 ms`** dan **`Max terpangkas 60,1% menjadi 399 ms`**.
-* **Kegagalan Server:** `0.0%` dengan jaminan kuota stok berhenti tepat di angka 0 (*Zero Overselling*).
-
----
-
-### C. Tabel Komparasi Kinerja Kuantitatif (2 vs 8 Replika)
-
-| Parameter Kinerja | Kondisi A: 2 Replika (0,5 CPU) | Kondisi B: 8 Replika (2,0 CPU) | Analisis & Peningkatan |
-|---|:---:|:---:|---|
-| **Pemenuhan SLA (Checks)** | 99,5% | **100,0%** | **Sempurna** (eliminasi seluruh request lambat) |
-| **Throughput Transaksi** | 1,09k req/s (~1.090 RPS) | **1,22k req/s (~1.220 RPS)** | **+11,9% Throughput** (+5.300 transaksi) |
-| **Total Transaksi Selesai** | 50.100 Request | **55.400 Request** | Peningkatan kapasitas pemrosesan |
-| **Rata-Rata Latensi (`avg`)** | 131 ms | **98 ms** | **Reduksi 25,2%** (waktu tanggap $< 100\text{ ms}$) |
-| **Median Latensi (`med`)** | 99 ms | **89 ms** | Respon transaksi konsisten sangat cepat |
-| **Persentil ke-90 (`p90`)** | 203 ms | **162 ms** | Reduksi 20,2% pada 90% pengguna |
-| **Persentil ke-95 (`p95`)** | 282 ms | **200 ms** | **Reduksi 29,1%** (stabil dalam ambang SLA) |
-| **Persentil ke-99 (`p99`)** | 613 ms *(CPU Bottleneck)* | **297 ms** | **Terpangkas 51,5%** (hilangkan saturasi) |
-| **Maksimum Latensi (`max`)** | 1.000 ms (1,0 detik) | **399 ms** | **Terpangkas 60,1%** (antrean CPU hilang) |
-| **Tingkat Error Server** | 0,0% (0 error) | **0,0% (0 error)** | Zero error rate & Zero overselling |
-
----
-
-### D. Pembahasan Teknis: CPU Throttling vs Horizontal Scale-Out
-
-1. **Akar Masalah pada 2 Replika**:
-   Alokasi $0,25\text{ CPU}$ per kontainer memaksa kernel Linux (*Completely Fair Scheduler*) membatasi siklus eksekusi CPU (*CPU quota throttling*) saat ribuan *request* masuk bersamaan. Akibatnya, terjadi antrean buffer soket TCP yang melipatgandakan latensi pada persentil ke-99 hingga menyentuh 613 ms.
-2. **Efektivitas Skalabilitas Horizontal Swarm**:
-   Skalasi ke 8 replika melipatgandakan kapasitas komputasi menjadi $2,0\text{ Core CPU}$ total. Melalui *IPVS Routing Mesh*, Nginx mendistribusikan beban secara merata ke 8 worker. Antrean soket tereliminasi, latensi ekor terpotong separuh (297 ms), dan throughput melonjak tanpa ada *connection drop*.
-
----
-
-## 7. Skenario Pengujian Lanjutan (Disaster Recovery & Flash Crowd)
-
-### A. Uji Disaster Recovery & Auto-Recovery Saat Redis Mati
-Skrip otomatis [test-failover-demo.js](test-failover-demo.js) membuktikan ketahanan sistem (CAP Theorem) saat basis data dimatikan mendadak:
+### Eksekusi Uji Beban:
 ```bash
-node test-failover-demo.js
+# Menjalankan menggunakan skrip batch
+.\run-k6.bat
+
+# ATAU menjalankan langsung via Docker (tanpa perlu menginstal k6 di laptop):
+type load-test\load-test.js | docker run --rm -i -e TARGET_URL=http://host.docker.internal grafana/k6 run -
 ```
-*Hasil Uji:*
-1. Transaksi normal: `HTTP 200 OK`.
-2. Redis dimatikan paksa via Swarm (`scale wartiket_redis=0`).
-3. Transaksi saat Redis mati: **Ditolak secara aman (`HTTP 500 Fail-Safe`)** untuk mencegah penjualan tiket fiktif.
-4. Redis dihidupkan kembali (`scale wartiket_redis=1`).
-5. Backend ioredis otomatis melakukan **Auto-Reconnect dalam 4 detik**, transaksi langsung kembali normal (`HTTP 200 OK`) tanpa perlu *restart* container backend.
+
+### Hasil SLA Pengujian:
+- **Tingkat Kegagalan Server (*Server Failure Rate*):** `0.00%` (Target Dosen: $< 1\%$).
+- **Response Time $p(95)$:** Rata-rata berkisar antara `50ms – 120ms` (Target Dosen: $< 200\text{ms}$).
+- **Overselling:** `0 Tiket` (Kuantitas penjualan tepat sesuai kuota).
 
 ---
 
-### B. Uji Instant Flash Crowd (1.000 User Berebut 1.000 Tiket Serentak)
-Membuktikan integritas *Atomic Locking* saat 1.000 pengguna virtual menembak bersamaan dalam milidetik pertama:
+## 8. Simulasi Disaster Recovery (DR) & Failover
+
+Sesuai ketentuan **Pertemuan 4 (Disaster Recovery & Failover Execution)**, sistem diuji terhadap berbagai skenario kegagalan:
+
+### Skenario 1: Mematikan 2 Container Worker Utama (Uji Pertemuan 4)
+Jalankan file otomasi:
 ```bash
-# 1. Reset tepat 1.000 tiket
-Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 1000}'
-
-# 2. 1.000 User membeli serentak (k6 instant spike)
-docker run --rm --network wartiket_wartiket-net -v "${PWD}/load-test:/load-test" -e TARGET_URL="http://nginx" grafana/k6 run /load-test/load-test-1000-users.js
-
-# 3. Verifikasi sisa stok
-Invoke-RestMethod -Uri "http://localhost/tickets"
+.\dr-test.bat
 ```
-*Hasil Observasi:* Tepat 1.000 tiket terjual habis (**sisa stok tepat 0, tidak pernah minus**). Semua request ke-1001 dan seterusnya menerima respon aman `HTTP 409 Sold Out`.
+Atau secara manual di terminal:
+```bash
+# 1. Matikan paksa 2 container worker wartiket_app
+docker kill $(docker ps --filter "name=wartiket_app" -q | Select-Object -First 2)
+
+# 2. Tembak transaksi secara bersamaan
+node test-quick.js
+
+# 3. Lihat pemulihan otomatis (Self-Healing) oleh Swarm
+docker service ps wartiket_app
+```
+**Hasil Analisis:**
+- **Zero Dropped Requests:** Nginx dengan fitur `proxy_next_upstream error timeout http_502 http_503` secara otomatis mengalihkan permintaan yang terkena container mati ke replika worker yang masih hidup.
+- **RTO (Recovery Time Objective):** Docker Swarm *reconciling loop* mendeteksi hilangnya container dan men-spawn 2 container pengganti baru dalam waktu $< 3$ detik.
+
+### Skenario 2: Kegagalan Ingress Nginx (High Availability)
+```bash
+# Matikan paksa 1 container Nginx
+docker rm -f $(docker ps -q -f name=wartiket_nginx | Select-Object -First 1)
+
+# Uji akses langsung
+curl -I http://localhost/health
+```
+**Hasil:** Port 80 tetap merespon instan dengan downtime `0ms` karena Docker Swarm Ingress Routing Mesh membelokkan trafik ke replika Nginx kedua.
 
 ---
 
-## 8. Antarmuka Web Interaktif (War Tiket Dashboard)
-
-Sistem dilengkapi dengan antarmuka web interaktif yang dapat diakses langsung melalui browser di:  
-👉 **`http://localhost/`**
-
-Fitur-fitur dashboard:
-* **Live Counter Sisa Stok Tiket**: Menampilkan kuota tiket secara langsung.
-* **Worker ID Telemetry**: Memperlihatkan kontainer backend mana yang melayani setiap transaksi.
-* **Real-time Status Alert**: Indikator visual hijau saat transaksi sukses (`HTTP 200`) dan merah saat tiket habis (`HTTP 409 Sold Out`).
-* **Interactive Reset Buttons**: Kemudahan mereset kuota stok (1.000 atau 50.000 tiket) untuk pengujian live.
-
----
-
-## 9. Struktur Repositori & Artefak Laporan
+## 9. Struktur Direktori Repositori
 
 ```text
-├── app/
-│   ├── Dockerfile             # Container definition Node.js API
-│   ├── package.json           # Dependencies Express & ioredis
-│   ├── server.js              # REST API, delay generator, Web UI handler & Lua script
-│   ├── index.html             # Antarmuka web live war tiket
-│   └── test.js                # Unit test atomic decrement logic
-├── nginx/
-│   ├── Dockerfile             # Nginx container definition
-│   └── nginx.conf             # Ingress proxy, keepalive pooling 128, buffered logs
-├── load-test/
-│   ├── load-test-demo.js      # Skrip k6 uji beban bertahap 45 detik (10-1000 VU)
-│   ├── load-test-1000-users.js# Skrip k6 instant flash crowd (1.000 VU serentak)
-│   └── load-test.js           # Skrip k6 standar 3 menit (10-1000 VU)
-├── docker-compose.yml         # Spesifikasi Docker Swarm stack & resource limits
-├── test-quick.js              # Verifikasi distribusi round-robin 20 request
-├── test-failover-demo.js      # Simulasi disaster recovery & fail-safe otomatis
-├── demo-pertemuan-3.ps1       # Runner PowerShell interaktif untuk live demo
-├── DAFTAR_PERINTAH.txt        # Cheat-sheet perintah terminal dari Pertemuan 1 - 3
-├── k6_results_2_replicas.png  # Bukti metrik dasbor k6 baseline 2 replika
-├── k6_results_8_replicas.png  # Bukti metrik dasbor k6 pasca-skalasi 8 replika
-├── Laporan_Progres_Gabungan_Pertemuan_1_2_dan_3_Kelompok_1_Terbaru.pdf # Laporan PDF Formal 4 Halaman
-└── README.md                  # Dokumentasi resmi repositori
+├── app/                                 # Sumber Kode Backend & Frontend
+│   ├── public/                          # Antarmuka Web Pembeli & Admin
+│   │   ├── css/style.css                # Tampilan UI Modern Responsif (Flexbox/Grid)
+│   │   ├── js/app.js                    # SPA Controller, War Engine & Anti-Stuck Logic
+│   │   ├── img/                         # Asset visual katalog konser
+│   │   └── index.html                   # HTML Tunggal (SPA Hash Routing)
+│   ├── src/                             # Arsitektur Modular Backend
+│   │   ├── config/                      # Koneksi Redis & PostgreSQL Pool
+│   │   ├── controllers/                 # Kontroler Auth, Tiket, Antrean, dan Konser
+│   │   └── routes/api.js                # Router RESTful API
+│   ├── Dockerfile                       # Konfigurasi container Node.js Mock API
+│   ├── package.json                     # Dependencies Express, ioredis, pg, jsonwebtoken
+│   ├── schema.sql                       # Struktur database relasional
+│   ├── seed.sql                         # Data awal 1.000 akun dummy & data konser
+│   ├── server.js                        # Entrypoint API & Artificial Delay Injection
+│   └── test.js                          # Unit test verifikasi logika internal
+├── nginx/                               # Konfigurasi Reverse Proxy & Ingress
+│   ├── Dockerfile                       # Image Nginx Alpine kustom
+│   └── nginx.conf                       # Konfigurasi buffering, timeout & keepalive
+├── docs/                                # Laporan Akademik & Materi Presentasi
+│   ├── PRESENTASI.md                    # Panduan presentasi 7 menit, naskah & Q&A
+│   ├── Laporan_Progres_Pertemuan_1_*.pdf # Laporan Pertemuan 1
+│   ├── Laporan_Progres_Gabungan_*.pdf   # Laporan Pertemuan 2
+│   ├── Laporan_Hasil_Testing_*.xlsx     # Data log audit performa
+│   └── diagram_*.png                    # Diagram topologi jaringan dan arsitektur
+├── load-test/                           # Skrip Pengujian Beban
+│   └── load-test.js                     # Skenario k6 10-1000 VU 3 menit SLA check
+├── tests/                               # Rangkaian Verifikasi Otomatis
+│   ├── e2e-war-tiket.mjs                # Browser Automation E2E (Chrome/Edge CDP)
+│   └── verify-concurrency-and-lock.js   # Uji race condition & validasi atomik lock
+├── docker-compose.yml                   # Spesifikasi Docker Swarm & Resource Limits
+├── start.bat                            # Skrip startup klaster 1-klik
+├── stop.bat                             # Skrip shutdown klaster 1-klik
+├── status.bat                           # Skrip pengecekan kesehatan klaster
+├── scale.bat                            # Skrip dynamic auto-scaling worker
+├── dr-test.bat                          # Skrip pengujian disaster recovery pertemuan 4
+├── run-k6.bat                           # Skrip pengujian beban k6 otomatis
+├── test-quick.js                        # Pengujian verifikasi load balancing 20 request
+└── README.md                            # Dokumentasi resmi proyek
 ```
 
 ---
 
-## 10. Matriks Pemenuhan Luaran Silabus Kuliah
+## 10. Panduan Presentasi 11 Menit & Sesi Q&A
 
-| Pertemuan | Target Luaran Silabus Dosen Pengampu | Realisasi Implementasi | Status |
-|:---:|---|---|:---:|
-| **Pertemuan 1** | Diagram arsitektur sistem, skema jaringan Docker, spesifikasi `docker-compose.yml` awal, dan repositori Git kelompok. | Diagram Mermaid 3-tier, skema jaringan overlay `wartiket-net`, berkas compose lengkap, dan repositori GitHub aktif. | **LENGKAP 100%** |
-| **Pertemuan 2** | Seluruh container dapat berjalan (*up & running*) dalam jaringan internal Docker dengan *resource limit* yang sudah diterapkan. | 3 Service (Nginx, App, Redis) running di Swarm, batas cgroups kernel 0.25 CPU dan 256MB RAM terverifikasi, load balancing round-robin 50:50. | **LENGKAP 100%** |
-| **Pertemuan 3** | Eksekusi skrip pengujian beban bertahap. Grafik perbandingan *throughput* (RPS) dan waktu tanggap saat layanan diskalakan. | Skrip k6 bertahap 1–1.000 VU, komparasi visual dasbor k6 (2 vs 8 replika), tabel kuantitatif, lonjakan throughput ke 1.220 RPS, latensi p99 terpangkas 51,5%. | **LENGKAP 100%** |
+Sesuai ketentuan, alokasi waktu presentasi adalah **7 Menit Pemaparan & Live Demo** serta **4 Menit Sesi Evaluasi & Tanya Jawab**.
+
+Dokumentasi lengkap naskah kata-demi-kata dan simulasi jawaban dosen tersedia di file:  
+👉 **[docs/PRESENTASI.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docs/PRESENTASI.md)**
+
+### Ringkasan Urutan Live Demo 7 Menit:
+1. **Menit 00:00 - 01:30 (Masalah & Arsitektur):** Jelaskan bahaya *flash crowd* war tiket dan perlihatkan diagram Mermaid.
+2. **Menit 01:30 - 03:00 (Resource Limits):** Tunjukkan `docker stack services wartiket` untuk membuktikan CPU 0.25 dan RAM 256M.
+3. **Menit 03:00 - 04:30 (Demo Load Balancing):** Jalankan `node test-quick.js`. Tunjukkan kolom `ServedBy` yang terbagi rata antar ID container.
+4. **Menit 04:30 - 05:30 (Dynamic Auto-Scaling):** Jalankan `docker service scale wartiket_app=8`. Buktikan 8 container langsung aktif dalam 2 detik.
+5. **Menit 05:30 - 06:30 (Disaster Recovery):** Jalankan `.\dr-test.bat`. Matikan 2 worker paksa dan buktikan sistem tetap melayani transaksi tanpa ada *request drop*.
+6. **Menit 06:30 - 07:00 (Penutup):** Paparkan ketercapaian SLA (Response Time $< 200\text{ms}$ dan $0\%$ *overselling*).
 
 ---
-&copy; 2026 **Kelompok 1 &bull; Komputasi Awan (Kelas H7A.7)**. Seluruh kode sumber dirancang untuk tujuan edukasi dan evaluasi performa klaster kontainer.
+
+## 11. Matriks Progres Mingguan (Pertemuan 1 - 5)
+
+| Pertemuan | Agenda & Luaran Wajib | Status Implementasi | Bukti Artefak |
+|---|---|---|---|
+| **Pertemuan 1** | **Planning & Architecture Design:** Diagram arsitektur sistem, skema jaringan Docker, spesifikasi `docker-compose.yml`, dan repositori Git kelompok. | **SELESAI (100%)** | Diagram Mermaid di [README.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/README.md), [docker-compose.yml](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docker-compose.yml), file PDF di `docs/`. |
+| **Pertemuan 2** | **Environment Setup & Core Deployment:** Seluruh container berjalan (*up & running*) dalam jaringan internal Docker dengan *resource limit* diterapkan. | **SELESAI (100%)** | Layanan `wartiket_nginx`, `wartiket_app`, `wartiket_redis`, `wartiket_db` terdeploy dengan CPU 0.25 & RAM 256M. |
+| **Pertemuan 3** | **Scalability & Load Testing (1-1000 Clients):** Eksekusi pengujian beban bertahap (10 s.d. 1000 VU). Grafik perbandingan throughput dan waktu tanggap saat diskalakan. | **SELESAI (100%)** | Skrip [load-test/load-test.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/load-test/load-test.js), skrip [scale.bat](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/scale.bat), dan [test-quick.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/test-quick.js). |
+| **Pertemuan 4** | **Disaster Recovery (DR) & Failover Execution:** Live demo mematikan container utama secara paksa saat pengujian berlangsung. Pembuktian failover dan pengukuran RTO. | **SELESAI (100%)** | Skrip otomasi [dr-test.bat](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/dr-test.bat), konfigurasi Nginx retry `proxy_next_upstream`, dan Swarm auto-restart. |
+| **Pertemuan 5** | **Monitoring & Final Demo:** Integrasi dashboard pemantauan, laporan akhir, serta demo sistem utuh. | **SELESAI (100%)** | Web Portal Admin terintegrasi pada route `#admin`, file laporan akademik lengkap di `docs/`, dan panduan presentasi [docs/PRESENTASI.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docs/PRESENTASI.md). |

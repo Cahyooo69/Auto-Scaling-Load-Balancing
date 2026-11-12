@@ -1,24 +1,26 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { Rate } from 'k6/metrics';
+import { check, sleep, group } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
 
-// Status 200 dan 409 adalah respon bisnis yang valid
-http.setResponseCallback(http.expectedStatuses(200, 409));
-
-// Custom metric to track true server failures (5xx, network drops)
-export const failureRate = new Rate('server_failures');
+// Custom Metrics for Cloud Performance Analysis
+export const serverFailureRate = new Rate('server_failures');
+export const successCheckoutRate = new Rate('checkout_success');
+export const soldOutRate = new Rate('checkout_sold_out');
+export const checkoutDuration = new Trend('checkout_duration_ms');
+export const totalTransactions = new Counter('total_transactions_attempted');
 
 export const options = {
   stages: [
-    { duration: '30s', target: 10 },    // Warm up / low load: 10 VUs
-    { duration: '45s', target: 100 },   // Medium load: 100 VUs
-    { duration: '45s', target: 500 },   // High load: 500 VUs
-    { duration: '60s', target: 1000 },  // Peak war tiket load: 1000 VUs
+    // Tahapan Standar 3 SKS: Ramp-up 10 -> 100 -> 500 -> 1000 VU dalam durasi total 3 Menit
+    { duration: '30s', target: 10 },    // Tahap 1: Sanity & Baseline (10 VU)
+    { duration: '45s', target: 100 },   // Tahap 2: Ramp-up Awal (100 VU)
+    { duration: '45s', target: 500 },   // Tahap 3: Beban Menengah (500 VU)
+    { duration: '60s', target: 1000 },  // Tahap 4: Peak War Tiket (1.000 VU)
   ],
   thresholds: {
-    // Target SLA: Response time < 200ms (95th percentile)
-    http_req_duration: ['avg<250', 'p(95)<500'],
-    // Target SLA: Server error rate < 1%
+    // Target SLA Dosen: Waktu tanggap < 200ms
+    http_req_duration: ['p(95)<200'],
+    // SLA Keandalan Dosen: Tingkat kegagalan server (5xx / drop) < 1%
     server_failures: ['rate<0.01'],
   },
 };
@@ -26,35 +28,121 @@ export const options = {
 const BASE_URL = __ENV.TARGET_URL || 'http://localhost';
 
 export default function () {
-  const url = `${BASE_URL}/tickets/buy`;
-  const payload = JSON.stringify({ userId: `user_${__VU}_${__ITER}` });
-  const params = {
+  // Simulasi 1.000 Akun Pengguna Dummy dari seed.sql (user1@test.com s/d user1000@test.com)
+  const vuId = __VU || 1;
+  const userIndex = ((vuId - 1) % 1000) + 1;
+  const userEmail = `user${userIndex}@test.com`;
+  const password = 'password123';
+  
+  // Pilih salah satu konser secara bergantian (ID 1, 2, atau 3)
+  const concertId = (userIndex % 3) + 1;
+
+  const standardHeaders = {
     headers: {
       'Content-Type': 'application/json',
+      'User-Agent': 'k6-WarTiket-LoadTest/2.0',
     },
     timeout: '10s',
   };
 
-  const res = http.post(url, payload, params);
+  let userId = userIndex + 5; // Offset ID akun dummy pada database
 
-  // Status 200 (Success bought) and 409 (Sold Out) are valid business outcomes
-  // Any 5xx or connection error is counted as a server failure
-  const isServerFailure = res.status >= 500 || res.status === 0;
-  failureRate.add(isServerFailure ? 1 : 0);
+  // ==========================================================================
+  // ALUR 1: LOGIN PENGGUNA (Autentikasi Akun k6)
+  // ==========================================================================
+  group('1. Login Pengguna', () => {
+    const loginPayload = JSON.stringify({
+      email: userEmail,
+      password: password,
+    });
 
-  check(res, {
-    'status is 200 or 409': (r) => r.status === 200 || r.status === 409,
-    'has valid JSON response': (r) => {
-      try {
-        const body = JSON.parse(r.body);
-        return body && body.servedBy !== undefined;
-      } catch (e) {
-        return false;
-      }
-    },
-    'response time wajar': (r) => r.timings.duration < 500,
+    const loginRes = http.post(`${BASE_URL}/api/auth/login`, loginPayload, standardHeaders);
+
+    const isFailure = loginRes.status >= 500 || loginRes.status === 0;
+    serverFailureRate.add(isFailure ? 1 : 0);
+
+    const loginOk = check(loginRes, {
+      'login status 200': (r) => r.status === 200,
+      'user data returned': (r) => {
+        try {
+          const body = JSON.parse(r.body);
+          if (body.user && body.user.id) {
+            userId = body.user.id;
+            return true;
+          }
+          return false;
+        } catch (e) {
+          return false;
+        }
+      },
+    });
   });
 
-  // Brief pacing between requests per virtual user (200ms)
+  // Jeda singkat simulasi aktivitas manusia membaca halaman (100ms - 200ms)
+  sleep(0.15);
+
+  // ==========================================================================
+  // ALUR 2: LIHAT KATALOG KONSER REAL-TIME
+  // ==========================================================================
+  group('2. Lihat Katalog Konser', () => {
+    const concertsRes = http.get(`${BASE_URL}/api/concerts`, standardHeaders);
+
+    const isFailure = concertsRes.status >= 500 || concertsRes.status === 0;
+    serverFailureRate.add(isFailure ? 1 : 0);
+
+    check(concertsRes, {
+      'katalog status 200': (r) => r.status === 200,
+      'katalog berisi minimal 3 konser': (r) => {
+        try {
+          const list = JSON.parse(r.body);
+          return Array.isArray(list) && list.length >= 3;
+        } catch (e) {
+          return false;
+        }
+      },
+    });
+  });
+
+  // Jeda singkat sebelum war tiket (50ms - 100ms)
+  sleep(0.1);
+
+  // ==========================================================================
+  // ALUR 3: WAR TIKET CHECKOUT (ATOMIC LOCK REDIS + POSTGRESQL ACID)
+  // ==========================================================================
+  group('3. War Tiket Checkout', () => {
+    const buyPayload = JSON.stringify({
+      userId: userId,
+      concertId: concertId,
+    });
+
+    const startTime = Date.now();
+    const buyRes = http.post(`${BASE_URL}/api/tickets/buy`, buyPayload, standardHeaders);
+    checkoutDuration.add(Date.now() - startTime);
+    totalTransactions.add(1);
+
+    const isFailure = buyRes.status >= 500 || buyRes.status === 0;
+    serverFailureRate.add(isFailure ? 1 : 0);
+
+    const isSuccess = buyRes.status === 200;
+    const isSoldOut = buyRes.status === 409;
+
+    successCheckoutRate.add(isSuccess ? 1 : 0);
+    soldOutRate.add(isSoldOut ? 1 : 0);
+
+    check(buyRes, {
+      'checkout status 200 (Sukses) atau 409 (Sold Out)': (r) => r.status === 200 || r.status === 409,
+      'respon memuat server instance load balancer (servedBy)': (r) => {
+        try {
+          const body = JSON.parse(r.body);
+          return body && body.servedBy !== undefined;
+        } catch (e) {
+          return false;
+        }
+      },
+      'durasi checkout < 500ms': (r) => r.timings.duration < 500,
+    });
+  });
+
+  // Jeda antar iterasi pengguna
   sleep(0.2);
 }

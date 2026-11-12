@@ -1,10 +1,18 @@
 const assert = require('assert');
-const { BUY_LUA_SCRIPT } = require('./server');
+const {
+  BUY_LUA_SCRIPT,
+  LOCK_SEAT_LUA_SCRIPT,
+  UNLOCK_SEAT_LUA_SCRIPT,
+  QUEUE_SYNC_LUA_SCRIPT,
+  mergeRedisSeatLocks,
+  releaseRedisCheckoutLock,
+} = require('./server');
+const { signJwt, verifyJwt } = require('./src/utils/jwt');
 
 // Unit test verifying atomic decrement algorithm & Lua script integrity
 function testAtomicLogic() {
   console.log('Running testAtomicLogic...');
-
+  
   // Simulated atomic Redis memory state
   let state = { 'concert:tickets:stock': 5 };
 
@@ -46,7 +54,157 @@ function testAtomicLogic() {
   assert.strictEqual(getCheckoutStatus(10), 200, 'Positive remaining stock must return HTTP 200');
   assert.strictEqual(getCheckoutStatus(-1), 409, 'Sold out (-1) must return HTTP 409');
 
-  console.log(' All unit tests passed successfully.');
+  // 5. Verify LOCK_SEAT_LUA_SCRIPT atomically checks GET before SET ... EX
+  assert(
+    typeof LOCK_SEAT_LUA_SCRIPT === 'string' &&
+      LOCK_SEAT_LUA_SCRIPT.includes("redis.call('GET', seatKey)") &&
+      LOCK_SEAT_LUA_SCRIPT.includes("'EX'"),
+    'LOCK_SEAT_LUA_SCRIPT must check seatKey atomically before SET with EX TTL'
+  );
 }
 
-testAtomicLogic();
+async function testRedisLockHelpers() {
+  console.log('Running testRedisLockHelpers...');
+
+  const sampleSeats = [
+    { id: 101, seat_number: 'A-01', status: 'Available' },
+    { id: 102, seat_number: 'A-02', status: 'Available' },
+    { id: 103, seat_number: 'A-03', status: 'Booked' },
+  ];
+
+  // 1. Redis active lock marks only Available seats as Locked
+  const mockRedisOk = { mget: async () => [null, 'user:2', 'user:3'] };
+  const merged = await mergeRedisSeatLocks(1, sampleSeats, mockRedisOk, true);
+  assert.strictEqual(merged[0].status, 'Available');
+  assert.strictEqual(merged[1].status, 'Locked');
+  assert.strictEqual(merged[2].status, 'Booked', 'Booked seat must stay Booked even if lock key exists');
+
+  // 2. Redis read error gracefully falls back to DB rows without throwing
+  const mockRedisFail = { mget: async () => { throw new Error('ECONNREFUSED'); } };
+  const fallback = await mergeRedisSeatLocks(1, sampleSeats, mockRedisFail, true);
+  assert.deepStrictEqual(fallback, sampleSeats);
+
+  // 3. Rollback helper releases acquired lock & increments decremented stock, ignoring failures
+  const calls = [];
+  const mockRollbackRedis = {
+    del: async (key) => { calls.push(['del', key]); return 1; },
+    incr: async (key) => { calls.push(['incr', key]); return 1; },
+  };
+  await releaseRedisCheckoutLock({
+    redisClient: mockRollbackRedis,
+    stockKey: 'concert:1:stock',
+    seatLockKey: 'concert:1:seat:105:lock',
+    stockDecremented: true,
+    seatLockAcquired: true,
+  });
+  assert.deepStrictEqual(calls, [
+    ['del', 'concert:1:seat:105:lock'],
+    ['incr', 'concert:1:stock'],
+  ]);
+
+  // 4. Selective release must skip untouched resources
+  const selectiveCalls = [];
+  const mockSelectiveRedis = {
+    del: async (key) => { selectiveCalls.push(['del', key]); },
+    incr: async (key) => { selectiveCalls.push(['incr', key]); },
+  };
+  await releaseRedisCheckoutLock({
+    redisClient: mockSelectiveRedis,
+    stockKey: 'concert:1:stock',
+    seatLockKey: 'concert:1:seat:105:lock',
+    stockDecremented: false,
+    seatLockAcquired: false,
+  });
+  assert.strictEqual(selectiveCalls.length, 0);
+
+  // 5. Ownership-checked Lua unlock script is used when seatLockValue & atomicUnlockSeat exist
+  const unlockCalls = [];
+  const mockUnlockRedis = {
+    atomicUnlockSeat: async (key, val) => { unlockCalls.push(['atomicUnlockSeat', key, val]); return 1; },
+    del: async (key) => { unlockCalls.push(['del', key]); return 1; },
+    incr: async (key) => { unlockCalls.push(['incr', key]); return 1; },
+  };
+  await releaseRedisCheckoutLock({
+    redisClient: mockUnlockRedis,
+    stockKey: 'concert:1:stock',
+    seatLockKey: 'concert:1:seat:105:lock',
+    seatLockValue: '4:tok-1',
+    stockDecremented: true,
+    seatLockAcquired: true,
+  });
+  assert.deepStrictEqual(unlockCalls, [
+    ['atomicUnlockSeat', 'concert:1:seat:105:lock', '4:tok-1'],
+    ['incr', 'concert:1:stock'],
+  ]);
+
+  // 6. Verify UNLOCK_SEAT_LUA_SCRIPT & QUEUE_SYNC_LUA_SCRIPT invariants
+  assert(
+    typeof UNLOCK_SEAT_LUA_SCRIPT === 'string' &&
+      UNLOCK_SEAT_LUA_SCRIPT.includes("redis.call('GET', KEYS[1]) == ARGV[1]") &&
+      UNLOCK_SEAT_LUA_SCRIPT.includes("redis.call('DEL', KEYS[1])"),
+    'UNLOCK_SEAT_LUA_SCRIPT must verify lock ownership before DEL'
+  );
+  assert(
+    typeof QUEUE_SYNC_LUA_SCRIPT === 'string' &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ZREMRANGEBYSCORE') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ZPOPMIN') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('ADMITTED') &&
+      QUEUE_SYNC_LUA_SCRIPT.includes('QUEUED'),
+    'QUEUE_SYNC_LUA_SCRIPT must evict stale entries and promote FIFO waiters atomically'
+  );
+}
+
+function testJwtHelpers() {
+  console.log('Running testJwtHelpers...');
+  const tok = signJwt({ id: 7, email: 'user@wartiket.id', role: 'user' }, 60);
+  const decoded = verifyJwt(tok);
+  assert.strictEqual(decoded.id, 7);
+  assert.strictEqual(decoded.email, 'user@wartiket.id');
+  assert.strictEqual(verifyJwt(`${tok}tamper`), null, 'Tampered JWT signature must fail');
+  const expired = signJwt({ id: 7 }, -10);
+  assert.strictEqual(verifyJwt(expired), null, 'Expired JWT must be rejected');
+}
+
+(async () => {
+  testAtomicLogic();
+  testJwtHelpers();
+  await testRedisLockHelpers();
+  await testAuthPasswordCheck();
+  console.log(' All unit tests passed successfully.');
+  process.exit(0);
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+
+async function testAuthPasswordCheck() {
+  console.log('Running testAuthPasswordCheck...');
+  const { createAuthController } = require('./src/controllers/authController');
+  const authController = createAuthController({
+    pool: null,
+    redis: null,
+    getDbReady: () => false,
+    checkDbConnection: async () => false,
+    getRedisReady: () => false,
+  });
+
+  let resStatus = 0;
+  let resJson = null;
+  const mockRes = {
+    status(code) { resStatus = code; return this; },
+    json(data) { resJson = data; return this; },
+    cookie() {},
+  };
+
+  // 1. Wrong password must return 401
+  await authController.login({ body: { email: 'admin@wartiket.id', password: 'wrongpassword' } }, mockRes);
+  assert.strictEqual(resStatus, 401, 'Wrong password must return HTTP 401');
+  assert.ok(resJson?.message?.includes('Kata sandi salah'), 'Message must indicate wrong password');
+
+  // 2. Correct password must return 200
+  resStatus = 0;
+  resJson = null;
+  await authController.login({ body: { email: 'admin@wartiket.id', password: 'password123' } }, mockRes);
+  assert.strictEqual(resStatus, 0, 'Successful login does not set error status');
+  assert.strictEqual(resJson?.success, true, 'Login with correct password must succeed');
+}

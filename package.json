@@ -1,0 +1,27 @@
+{
+  "name": "auto-scaling-load-balancing",
+  "version": "1.0.0",
+  "description": "Auto-Scaling & Load Balancing Sistem War Tiket Konser Musik Menggunakan Docker Swarm",
+  "main": "test-quick.js",
+  "scripts": {
+    "start": "docker stack deploy -c docker-compose.yml wartiket",
+    "stop": "docker stack rm wartiket",
+    "scale": "docker service scale wartiket_app=8",
+    "scale:down": "docker service scale wartiket_app=2",
+    "status": "docker stack services wartiket",
+    "status:containers": "docker stack ps wartiket",
+    "test": "node test-quick.js",
+    "test:unit": "node app/test.js",
+    "test:dr": "dr-test.bat"
+  },
+  "keywords": [
+    "docker-swarm",
+    "load-balancing",
+    "nginx",
+    "redis",
+    "auto-scaling"
+  ],
+  "author": "Kelompok 1 - Cloud Computing",
+  "license": "ISC"
+}
+
