@@ -1,6 +1,3 @@
 {
-  "workbench.editorAssociations": {
-    "*.pdf": "pdf.preview"
-  }
+  "git.decorations.enabled": false
 }
-

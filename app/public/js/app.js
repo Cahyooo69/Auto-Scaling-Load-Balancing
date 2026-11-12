@@ -1402,8 +1402,47 @@ let checkoutAbortController = null;
 let queueAbortController = null;
 let queuePollTimer = null;
 let queuePollErrors = 0;
+let seatHoldTimer = null;
+let seatHoldDeadlineMs = 0;
+
+function stopSeatHoldTimer() {
+  if (seatHoldTimer) {
+    clearInterval(seatHoldTimer);
+    seatHoldTimer = null;
+  }
+  seatHoldDeadlineMs = 0;
+}
+
+function formatHoldClock(totalSec) {
+  const s = Math.max(0, Math.floor(totalSec));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function startSeatHoldTimer(expiresInSec = 180) {
+  stopSeatHoldTimer();
+  const initialSec = Math.max(30, Number(expiresInSec) || 180);
+  seatHoldDeadlineMs = Date.now() + initialSec * 1000;
+  const tick = () => {
+    const el = document.getElementById('warSeatHoldCountdown');
+    if (!el || !document.getElementById('warModal')?.classList.contains('active')) {
+      stopSeatHoldTimer();
+      return;
+    }
+    const remSec = Math.max(0, Math.ceil((seatHoldDeadlineMs - Date.now()) / 1000));
+    el.textContent = `Hold ${formatHoldClock(remSec)}`;
+    if (remSec <= 0) {
+      stopSeatHoldTimer();
+      state.selectedSeat = null;
+      renderSeats();
+      showWarFeedback('Batas waktu tahan kursi habis. Silakan pilih kursi atau masuk antrean ulang.');
+    }
+  };
+  tick();
+  seatHoldTimer = setInterval(tick, 1000);
+}
 
 function stopQueuePolling() {
+  stopSeatHoldTimer();
   if (queuePollTimer) {
     clearTimeout(queuePollTimer);
     queuePollTimer = null;
@@ -1445,6 +1484,7 @@ function renderQueueStatus(q) {
   if (bar && q) {
     const ticketLabel = q.ticketNumber ? `#${q.ticketNumber}` : 'Aktif';
     const isQueued = q.status === 'QUEUED';
+    const holdSec = Math.max(30, Number(q.expiresInSec) || 180);
     bar.classList.add('active');
     bar.classList.toggle('is-waiting', isQueued);
     bar.innerHTML = `
@@ -1452,9 +1492,17 @@ function renderQueueStatus(q) {
         <span class="${isQueued ? 'ui-spinner' : 'dot-online'}"></span>
         <span>${isQueued ? `Dalam Antrean (Tiket ${ticketLabel})` : `Giliran Anda (${ticketLabel}) • Silakan Pilih Kursi`}</span>
       </span>
-      <span class="queue-status-meta">Node: ${escapeHtml(q.servedBy || state.lastWorkerHost)}</span>
+      <span class="queue-status-meta">
+        ${isQueued ? '' : `<strong id="warSeatHoldCountdown" class="font-mono" style="margin-right: 10px;">Hold ${formatHoldClock(holdSec)}</strong> • `}Node: ${escapeHtml(q.servedBy || state.lastWorkerHost)}
+      </span>
     `;
+    if (isQueued) {
+      stopSeatHoldTimer();
+    } else {
+      startSeatHoldTimer(holdSec);
+    }
   } else if (bar) {
+    stopSeatHoldTimer();
     bar.classList.remove('active', 'is-waiting');
     bar.innerHTML = '';
   }
@@ -1950,6 +1998,7 @@ async function executeCheckout() {
 }
 
 function displayETicket(t, host) {
+  stopSeatHoldTimer();
   clearWarFeedback();
   setWarStep(3);
   document.getElementById('phaseDataDiri').style.display = 'none';

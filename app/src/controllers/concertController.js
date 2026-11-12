@@ -14,7 +14,7 @@ function getFallbackConcerts() {
       concertDate: '15 Desember 2026, 19:30 WIB',
       price: 1500000,
       totalSeats: 500,
-      availableSeats: 495,
+      availableSeats: 496,
       imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
       servedBy: os.hostname(),
     },

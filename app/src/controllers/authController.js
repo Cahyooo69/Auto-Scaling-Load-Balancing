@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const os = require('os');
-const { signJwt } = require('../utils/jwt');
+const { signJwt, verifyJwt, extractJwtFromRequest } = require('../utils/jwt');
 
 const USER_CACHE_TTL_SEC = 60;
 const SESSION_TTL_SEC = 3600;
@@ -60,11 +60,6 @@ function createAuthController({ pool, redis, getDbReady, checkDbConnection, getR
         const demoUsers = {
           'admin@wartiket.id': { id: 1006, name: 'Admin WarTiket', email: 'admin@wartiket.id', password: 'password123', phone: '081100000001', id_card: '3171000000000001', role: 'admin' },
           'user@wartiket.id': { id: 1007, name: 'User Penonton', email: 'user@wartiket.id', password: 'password123', phone: '081100000002', id_card: '3171000000000002', role: 'user' },
-          'dosen@wartiket.id': { id: 1, name: 'Dr. Ir. Budi Santoso, M.Kom', email: 'dosen@wartiket.id', password: 'password123', phone: '081122334455', id_card: '3171010101750001', role: 'lecturer' },
-          'mahasiswa1@wartiket.id': { id: 2, name: 'Kelompok 1 Cloud Lead', email: 'mahasiswa1@wartiket.id', password: 'password123', phone: '081234567890', id_card: '3171020202990002', role: 'student' },
-          'mahasiswa2@wartiket.id': { id: 3, name: 'Kelompok 1 DevOps Engineer', email: 'mahasiswa2@wartiket.id', password: 'password123', phone: '081298765432', id_card: '3171030303980003', role: 'student' },
-          'vip.buyer@gmail.com': { id: 4, name: 'Siti Rahmawati (VIP Buyer)', email: 'vip.buyer@gmail.com', password: 'password123', phone: '081345678901', id_card: '3171040404950004', role: 'vip' },
-          'festival.fan@gmail.com': { id: 5, name: 'Andi Pratama (Festival Goer)', email: 'festival.fan@gmail.com', password: 'password123', phone: '081456789012', id_card: '3171050505970005', role: 'user' },
         };
 
         if (demoUsers[normalizedEmail]) {
@@ -141,22 +136,28 @@ function createAuthController({ pool, redis, getDbReady, checkDbConnection, getR
 
   async function getSession(req, res) {
     const token = extractSessionToken(req);
-    if (!token) {
-      return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
+    if (token && getRedisReady()) {
+      try {
+        const raw = await redis.get(`session:${token}`);
+        if (raw) {
+          await redis.expire(`session:${token}`, SESSION_TTL_SEC).catch(() => {});
+          return res.json({ authenticated: true, user: JSON.parse(raw), servedBy: os.hostname() });
+        }
+      } catch {}
     }
-    if (!getRedisReady()) {
-      return res.status(503).json({ authenticated: false, degraded: true, servedBy: os.hostname() });
+
+    // Fallback stateless JWT validation across replicas or restarts
+    const jwtTok = extractJwtFromRequest(req);
+    const decoded = jwtTok ? verifyJwt(jwtTok) : null;
+    if (decoded && decoded.id) {
+      return res.json({
+        authenticated: true,
+        user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'user' },
+        servedBy: os.hostname(),
+      });
     }
-    try {
-      const raw = await redis.get(`session:${token}`);
-      if (!raw) {
-        return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
-      }
-      await redis.expire(`session:${token}`, SESSION_TTL_SEC).catch(() => {});
-      return res.json({ authenticated: true, user: JSON.parse(raw), servedBy: os.hostname() });
-    } catch (err) {
-      return res.status(500).json({ authenticated: false, error: err.message, servedBy: os.hostname() });
-    }
+
+    return res.status(401).json({ authenticated: false, servedBy: os.hostname() });
   }
 
   async function logout(req, res) {

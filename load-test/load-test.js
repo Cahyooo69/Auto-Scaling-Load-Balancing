@@ -2,6 +2,9 @@ import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
 
+// HTTP 200 (Sukses) & 409 (Sold Out) merupakan respon bisnis valid saat war berlangsung
+http.setResponseCallback(http.expectedStatuses(200, 409));
+
 // Custom Metrics for Cloud Performance Analysis
 export const serverFailureRate = new Rate('server_failures');
 export const successCheckoutRate = new Rate('checkout_success');
@@ -26,6 +29,14 @@ export const options = {
 };
 
 const BASE_URL = __ENV.TARGET_URL || 'http://localhost';
+
+export function setup() {
+  const res = http.post(`${BASE_URL}/api/tickets/reset`, '{}', {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: '10s',
+  });
+  check(res, { 'setup reset HTTP 200': (r) => r.status === 200 });
+}
 
 export default function () {
   // Simulasi 1.000 Akun Pengguna Dummy dari seed.sql (user1@test.com s/d user1000@test.com)
@@ -145,4 +156,11 @@ export default function () {
 
   // Jeda antar iterasi pengguna
   sleep(0.2);
+}
+
+export function teardown() {
+  http.post(`${BASE_URL}/api/tickets/reset`, '{}', {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: '10s',
+  });
 }

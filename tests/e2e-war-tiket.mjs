@@ -459,9 +459,12 @@ async function main() {
     await cdp.eval(`openWarModal(1)`);
     await cdp.waitFor(`() => Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).some(b => b.textContent.trim() === 'E-05')`);
 
-    // Verify live queue status bar appeared during modal entry
+    // Verify live queue status bar & Seat Hold timer countdown appeared during modal entry
     const queueBarText = await cdp.eval(`document.getElementById('warQueueStatusBar')?.textContent?.trim() || ''`);
-    assert.ok(queueBarText.includes('Giliran Anda') && queueBarText.includes('Node:'), `Queue status bar must display active status & node, got "${queueBarText}"`);
+    assert.ok(
+      queueBarText.includes('Giliran Anda') && queueBarText.includes('Node:') && /\bHold\s+\d{2}:\d{2}\b/.test(queueBarText),
+      `Queue status bar must display active status, Hold MM:SS timer & node, got "${queueBarText}"`
+    );
 
     const step1Ready = await cdp.eval(`(() => {
       const btn = Array.from(document.querySelectorAll('#modalSeatGrid .seat-btn')).find(b => b.textContent.trim() === 'E-05');
@@ -524,10 +527,16 @@ async function main() {
     // SKENARIO 4b: Riwayat Pemesanan (JWT My Orders) & Live Stress Test UI
     // -----------------------------------------------------------------------
     console.log('[Skenario 4b] Verifying JWT Order History (#riwayat) & Live Stress Test Panel (#live-test)...');
+    // Verify both SPA click and direct /riwayat route show booked E-05 PAID order
     await cdp.eval(`document.querySelector('.nav-link[data-page="riwayat"]').click()`);
     await cdp.waitFor(`() => document.querySelectorAll('#ordersContent .orders-table tbody tr').length > 0`, 8000);
     const orderRowText = await cdp.eval(`document.querySelector('#ordersContent .orders-table tbody tr')?.textContent || ''`);
     assert.ok(orderRowText.includes('E-05') && orderRowText.includes('PAID'), `Order history must display booked E-05 PAID order, got "${orderRowText}"`);
+
+    await cdp.goto(`${BASE_URL}/riwayat`);
+    await cdp.waitFor(`() => document.getElementById('page-riwayat')?.classList.contains('is-active') && document.querySelectorAll('#ordersContent .orders-table tbody tr').length > 0`, 8000);
+    const directOrderText = await cdp.eval(`document.querySelector('#ordersContent .orders-table tbody tr')?.textContent || ''`);
+    assert.ok(directOrderText.includes('E-05') && directOrderText.includes('PAID'), `Direct /riwayat must render booked E-05 PAID order, got "${directOrderText}"`);
 
     await cdp.eval(`document.querySelector('.nav-link[data-page="live-test"]').click()`);
     await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);

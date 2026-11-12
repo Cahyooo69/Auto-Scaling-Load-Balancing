@@ -74,8 +74,6 @@ body {
 .section-label,
 .welcome-title,
 .welcome-desc,
-.section-title-centered,
-.section-subtitle-centered,
 .concert-card,
 .card-artist,
 .card-title,
@@ -855,28 +853,6 @@ html.wt-mobile .navbar {
   padding: 72px 0;
 }
 
-.section-header-centered {
-  text-align: center;
-  width: 720px;
-  margin: 0 auto 40px;
-}
-
-.section-title-centered {
-  font-family: var(--font-heading);
-  font-size: 44px;
-  line-height: 52px;
-  font-weight: 900;
-  color: var(--color-forest);
-  letter-spacing: -0.5px;
-  margin-bottom: 10px;
-}
-
-.section-subtitle-centered {
-  color: var(--color-text-muted);
-  font-size: 17px;
-  line-height: 26px;
-}
-
 .search-summary-bar {
   display: none;
   align-items: center;
@@ -1057,6 +1033,7 @@ html.wt-mobile .navbar {
   height: 52px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin-bottom: 14px;
@@ -2654,8 +2631,7 @@ body.is-mobile .page-hero-band.container {
   min-height: 340px;
 }
 
-body.is-mobile .hero-inner,
-body.is-mobile .section-header-centered {
+body.is-mobile .hero-inner {
   width: 100%;
 }
 
@@ -2720,8 +2696,7 @@ body.is-mobile .badge-circle-orange {
   height: 44px;
 }
 
-body.is-mobile .welcome-title,
-body.is-mobile .section-title-centered {
+body.is-mobile .welcome-title {
   font-size: 27px;
   line-height: 34px;
   overflow-wrap: break-word;

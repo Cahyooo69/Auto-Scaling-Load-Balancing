@@ -65,6 +65,9 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
+    depends_on:
+      - redis
+      - db
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -82,7 +85,7 @@ services:
     networks:
       - wartiket-net
     deploy:
-      replicas: 2
+      replicas: 3
       restart_policy:
         condition: any
         delay: 2s
@@ -105,19 +108,21 @@ services:
       retries: 3
       start_period: 3s
 
-  # Nginx: Reverse Proxy & Ingress Load Balancer (High Availability: 2 Replicas)
+  # Nginx: Reverse Proxy & Load Balancer (1 replica agar port 80/443 tidak bentrok saat docker-compose up)
   nginx:
     image: wartiket-nginx:latest
     build:
       context: ./nginx
       dockerfile: Dockerfile
+    depends_on:
+      - app
     ports:
       - "80:80"
       - "443:443"
     networks:
       - wartiket-net
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: any
         delay: 2s

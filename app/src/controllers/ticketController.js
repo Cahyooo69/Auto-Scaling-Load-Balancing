@@ -15,6 +15,55 @@ const {
 } = require('./queueController');
 
 function createTicketController({ pool, redis, getDbReady, checkDbConnection, getRedisReady }) {
+  const concertMetaCache = new Map();
+  const userMetaCache = new Map();
+
+  async function getCheckoutMetadata(userId, concertId) {
+    const now = Date.now();
+    const cachedUser = userMetaCache.get(userId);
+    const hasFreshUser = cachedUser && (now - cachedUser.at) < 60000;
+    const cachedConcert = concertMetaCache.get(concertId);
+    const hasFreshConcert = cachedConcert && (now - cachedConcert.at) < 15000;
+
+    const [userRes, concertRes] = await Promise.all([
+      hasFreshUser
+        ? Promise.resolve(null)
+        : pool.query('SELECT id, name, email FROM users WHERE id = $1', [userId]),
+      hasFreshConcert
+        ? Promise.resolve(null)
+        : pool.query('SELECT title, venue, concert_date, price FROM concerts WHERE id = $1', [concertId]),
+    ]);
+
+    let userMeta;
+    if (hasFreshUser) {
+      userMeta = cachedUser.data;
+    } else {
+      userMeta = userRes && userRes.rows.length > 0
+        ? { id: userRes.rows[0].id, name: userRes.rows[0].name, email: userRes.rows[0].email }
+        : { id: null, name: 'Penonton Terdaftar', email: 'user@wartiket.id' };
+      if (userMetaCache.size > 2000) userMetaCache.clear();
+      userMetaCache.set(userId, { at: now, data: userMeta });
+    }
+
+    let concertMeta;
+    if (hasFreshConcert) {
+      concertMeta = cachedConcert.data;
+    } else if (concertRes && concertRes.rows.length > 0) {
+      const cRow = concertRes.rows[0];
+      concertMeta = {
+        title: cRow.title,
+        venue: cRow.venue,
+        concertDate: cRow.concert_date,
+        price: parseFloat(cRow.price),
+      };
+      concertMetaCache.set(concertId, { at: now, data: concertMeta });
+    } else {
+      concertMeta = { title: 'Konser Musik', venue: 'Jakarta', concertDate: '2026', price: 1500000 };
+    }
+
+    return { userMeta, concertMeta };
+  }
+
   async function getTicketStatus(req, res) {
     try {
       if (!getRedisReady()) {
@@ -122,6 +171,8 @@ function createTicketController({ pool, redis, getDbReady, checkDbConnection, ge
 
       // Step 2: Single-roundtrip PostgreSQL Atomic ACID Writable CTE
       const orderId = `TRX-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      const { userMeta, concertMeta } = await getCheckoutMetadata(userId, concertId);
+      const dbUserId = userMeta.id;
       const hostInstance = os.hostname();
 
       const atomicResult = await pool.query(
@@ -161,7 +212,7 @@ function createTicketController({ pool, redis, getDbReady, checkDbConnection, ge
            FROM ins_booking b CROSS JOIN claimed_seat s
          )
          SELECT id, seat_number, category, price FROM claimed_seat`,
-        [userId, seatId, concertId, orderId, hostInstance]
+        [dbUserId, seatId, concertId, orderId, hostInstance]
       );
 
       if (atomicResult.rows.length === 0) {
@@ -186,12 +237,12 @@ function createTicketController({ pool, redis, getDbReady, checkDbConnection, ge
       const seatRecord = atomicResult.rows[0];
       seatId = seatRecord.id;
       const bookedSeatNumber = seatRecord.seat_number || requestedSeatNumber || 'A-01';
-      const ticketPrice = parseFloat(seatRecord.price || 1500000);
+      const ticketPrice = parseFloat(seatRecord.price || concertMeta.price);
 
-      // Decrement available_seats in PostgreSQL without race conditions
+      // Update display counter outside the critical row claim so concurrent buyers never serialize on concerts.id
       pool.query(
-        'UPDATE concerts SET available_seats = GREATEST(0, available_seats - 1) WHERE id = $1',
-        [concertId]
+        'UPDATE concerts SET available_seats = GREATEST(0, LEAST(available_seats, $1)) WHERE id = $2',
+        [remainingStock, concertId]
       ).catch(() => {});
 
       // Pipelined Redis cleanup
@@ -216,9 +267,14 @@ function createTicketController({ pool, redis, getDbReady, checkDbConnection, ge
           orderId: orderId,
           user: {
             id: userId,
+            name: userMeta.name,
+            email: userMeta.email,
           },
           concert: {
             id: concertId,
+            title: concertMeta.title,
+            venue: concertMeta.venue,
+            concertDate: concertMeta.concertDate,
           },
           seat: {
             id: seatId,
