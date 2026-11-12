@@ -64,56 +64,53 @@ Implementasi proyek ini secara ketat merujuk pada standar penilaian mata kuliah 
 
 ## 3. Arsitektur Sistem & Diagram Alur
 
-Arsitektur klaster beroperasi di atas Docker Swarm Ingress Routing Mesh dan Overlay Network:
+Agar mudah dipahami oleh siapa pun (bahkan pemula), bayangkan sistem ini bekerja seperti **Loket Penjualan Tiket Konser Resmi di Stadion Besar**:
+
+1. **Pengunjung / Calon Pembeli (Klien k6):** Ribuan penonton datang serentak dalam hitungan detik saat tiket dibuka.
+2. **Pintu Masuk & Petugas Antrean (Nginx Load Balancer):** Menerima semua penonton di gerbang utama (Port 80) dan mengarahkan antrean secara adil agar tidak ada penumpukan di satu pintu.
+3. **Tim Kasir Tiket (Node.js Worker API):** Pada kondisi normal, ada 2 kasir yang melayani. Jika antrean melonjak drastis, sistem secara otomatis menambah kasir hingga 8 orang (*Auto-Scaling*) tanpa perlu mematikan loket.
+4. **Papan Stok Digital Terpusat (Redis Atomic Locking):** Seluruh kasir melihat satu papan stok digital di memori RAM. Begitu 1 tiket dibeli, kuota berkurang seketika dalam 0,1 milidetik, sehingga **mustahil ada 2 orang mendapatkan tiket/kursi yang sama (0% Overselling)**.
+5. **Lemari Arsip Resmi (PostgreSQL Database):** Menyimpan bukti pembayaran dan riwayat pesanan tiket secara aman dan permanen.
+
+---
+
+### Diagram Alur Sederhana
 
 ```mermaid
 flowchart TD
-    subgraph Clients["Klien / Simulasi Beban K6"]
-        U["10 - 1000 Virtual Users (VU)<br/>Permintaan War Tiket Simultan"]
+    subgraph Klien["1. Pengunjung / Calon Pembeli"]
+        VU["👤 10 - 1.000 Pengguna Simultan (Traffic War Tiket)"]
     end
 
-    subgraph Host["Docker Swarm Cluster Host"]
-        subgraph LayerIngress["Lapis Ingress & Load Balancing (Port 80)"]
-            NGINX1["Nginx Replica 1<br/>Reverse Proxy & Buffer<br/>CPU: 0.25, RAM: 256M"]
-            NGINX2["Nginx Replica 2 (HA)<br/>Ingress Failover Backup<br/>CPU: 0.25, RAM: 256M"]
-        end
-
-        subgraph OverlayNet["Docker Overlay Network: wartiket-net"]
-            VIP["Docker Swarm Routing Mesh (IPVS VIP)<br/>DNS: app:3000"]
-
-            subgraph WorkerCluster["Cluster Worker Node.js (2 -> 8 Replika Elastis)"]
-                APP1["Worker 1 (wartiket_app.1)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
-                APP2["Worker 2 (wartiket_app.2)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
-                APP3["Worker 3 (Dynamic Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
-                APPX["Worker 4..8 (Auto Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
-            end
-
-            subgraph StateLayer["Lapis Penyimpanan & Atomic Locking"]
-                REDIS["Redis 7 Container<br/>In-Memory Atomic Lua Lock<br/>AOF Volume Persistence<br/>CPU: 0.25, RAM: 256M"]
-                PG["PostgreSQL 16 Container<br/>ACID Data Persistence<br/>Relational Table Storage<br/>CPU: 0.50, RAM: 512M"]
-            end
-        end
+    subgraph Gerbang["2. Pintu Masuk & Load Balancer"]
+        NGINX["🛡️ Nginx Reverse Proxy (Port 80)<br/>Membagi Antrean Tamu Agar Rata"]
     end
 
-    U -->|HTTP Request Port 80| NGINX1
-    U -.->|Failover Port 80| NGINX2
-    NGINX1 -->|proxy_pass keepalive| VIP
-    NGINX2 -->|proxy_pass keepalive| VIP
+    subgraph KlasterSwarm["3. Klaster Kasir / Worker (Docker Swarm)"]
+        VIP{"🌐 Swarm Routing Mesh (IPVS)"}
+        W1["⚡ Worker API 1 (Aktif)"]
+        W2["⚡ Worker API 2 (Aktif)"]
+        W3["⚡ Worker API 3..8 (Auto-Scale Saat Ramai)"]
+    end
 
-    VIP -->|Round-Robin| APP1
-    VIP -->|Round-Robin| APP2
-    VIP -.->|Auto Load Balance| APP3
-    VIP -.->|Auto Load Balance| APPX
+    subgraph Data["4. Papan Kuota & Database"]
+        REDIS[("⚡ Redis In-Memory (Lua Script)<br/>Kunci Stok Kilat: 0% Tiket Dobel")]
+        DB[("💾 PostgreSQL 16<br/>Simpan Data Transaksi Resmi")]
+    end
 
-    APP1 -->|EVALSHA Atomic Decr| REDIS
-    APP2 -->|EVALSHA Atomic Decr| REDIS
-    APP3 -->|EVALSHA Atomic Decr| REDIS
-    APPX -->|EVALSHA Atomic Decr| REDIS
+    VU -->|"1. Kirim Permintaan Beli"| NGINX
+    NGINX -->|"2. Teruskan Antrean"| VIP
+    VIP -->|"Bagi Beban Rata"| W1
+    VIP -->|"Bagi Beban Rata"| W2
+    VIP -.->|"Bagi Beban Tambahan"| W3
 
-    APP1 -.->|Commit Order Transaksi| PG
-    APP2 -.->|Commit Order Transaksi| PG
-    APP3 -.->|Commit Order Transaksi| PG
-    APPX -.->|Commit Order Transaksi| PG
+    W1 -->|"3. Amankan Kuota Kilat"| REDIS
+    W2 -->|"3. Amankan Kuota Kilat"| REDIS
+    W3 -->|"3. Amankan Kuota Kilat"| REDIS
+
+    W1 -.->|"4. Catat Transaksi Sah"| DB
+    W2 -.->|"4. Catat Transaksi Sah"| DB
+    W3 -.->|"4. Catat Transaksi Sah"| DB
 ```
 
 ---
