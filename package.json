@@ -11,7 +11,8 @@
     "status": "docker stack services wartiket",
     "status:containers": "docker stack ps wartiket",
     "test": "node test-quick.js",
-    "test:unit": "node app/test.js"
+    "test:unit": "node app/test.js",
+    "test:dr": "dr-test.bat"
   },
   "keywords": [
     "docker-swarm",

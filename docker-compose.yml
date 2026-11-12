@@ -82,7 +82,7 @@ services:
     networks:
       - wartiket-net
     deploy:
-      replicas: 3
+      replicas: 2
       restart_policy:
         condition: any
         delay: 2s

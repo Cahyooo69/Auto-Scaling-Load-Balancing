@@ -169,9 +169,42 @@ function testJwtHelpers() {
   testAtomicLogic();
   testJwtHelpers();
   await testRedisLockHelpers();
+  await testAuthPasswordCheck();
   console.log(' All unit tests passed successfully.');
   process.exit(0);
 })().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+async function testAuthPasswordCheck() {
+  console.log('Running testAuthPasswordCheck...');
+  const { createAuthController } = require('./src/controllers/authController');
+  const authController = createAuthController({
+    pool: null,
+    redis: null,
+    getDbReady: () => false,
+    checkDbConnection: async () => false,
+    getRedisReady: () => false,
+  });
+
+  let resStatus = 0;
+  let resJson = null;
+  const mockRes = {
+    status(code) { resStatus = code; return this; },
+    json(data) { resJson = data; return this; },
+    cookie() {},
+  };
+
+  // 1. Wrong password must return 401
+  await authController.login({ body: { email: 'admin@wartiket.id', password: 'wrongpassword' } }, mockRes);
+  assert.strictEqual(resStatus, 401, 'Wrong password must return HTTP 401');
+  assert.ok(resJson?.message?.includes('Kata sandi salah'), 'Message must indicate wrong password');
+
+  // 2. Correct password must return 200
+  resStatus = 0;
+  resJson = null;
+  await authController.login({ body: { email: 'admin@wartiket.id', password: 'password123' } }, mockRes);
+  assert.strictEqual(resStatus, 0, 'Successful login does not set error status');
+  assert.strictEqual(resJson?.success, true, 'Login with correct password must succeed');
+}
