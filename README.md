@@ -74,24 +74,23 @@ flowchart TD
 
     subgraph Host["Docker Swarm Cluster Host"]
         subgraph LayerIngress["Lapis Ingress & Load Balancing (Port 80)"]
-            NGINX1["Nginx Replica 1<br/>Reverse Proxy & Buffer<br/>CPU: 0.25 | RAM: 256M"]
-            NGINX2["Nginx Replica 2 (HA)<br/>Ingress Failover Backup<br/>CPU: 0.25 | RAM: 256M"]
+            NGINX1["Nginx Replica 1<br/>Reverse Proxy & Buffer<br/>CPU: 0.25, RAM: 256M"]
+            NGINX2["Nginx Replica 2 (HA)<br/>Ingress Failover Backup<br/>CPU: 0.25, RAM: 256M"]
         end
 
         subgraph OverlayNet["Docker Overlay Network: wartiket-net"]
             VIP["Docker Swarm Routing Mesh (IPVS VIP)<br/>DNS: app:3000"]
 
             subgraph WorkerCluster["Cluster Worker Node.js (2 -> 8 Replika Elastis)"]
-                APP1["Worker 1 (wartiket_app.1)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
-                APP2["Worker 2 (wartiket_app.2)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
-                APP3["Worker 3 (Dynamic Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
-                APPX["Worker 4..8 (Auto Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25 | RAM: 256M"]
+                APP1["Worker 1 (wartiket_app.1)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
+                APP2["Worker 2 (wartiket_app.2)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
+                APP3["Worker 3 (Dynamic Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
+                APPX["Worker 4..8 (Auto Scaled)<br/>Delay: 50-100ms<br/>CPU: 0.25, RAM: 256M"]
             end
-        end
 
             subgraph StateLayer["Lapis Penyimpanan & Atomic Locking"]
-                REDIS["Redis 7 Container<br/>In-Memory Atomic Lua Lock<br/>AOF Volume Persistence<br/>CPU: 0.25 | RAM: 256M"]
-                PG["PostgreSQL 16 Container<br/>ACID Data Persistence<br/>Relational Table Storage<br/>CPU: 0.50 | RAM: 512M"]
+                REDIS["Redis 7 Container<br/>In-Memory Atomic Lua Lock<br/>AOF Volume Persistence<br/>CPU: 0.25, RAM: 256M"]
+                PG["PostgreSQL 16 Container<br/>ACID Data Persistence<br/>Relational Table Storage<br/>CPU: 0.50, RAM: 512M"]
             end
         end
     end
