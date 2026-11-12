@@ -31,11 +31,11 @@ function fit() {
   const cw = document.documentElement.clientWidth || DESIGN_W;
   const ch = document.documentElement.clientHeight || 900;
   const mobile = isMobileViewport();
-  const navbar = document.getElementById('navbar');
+  const navbar = document.getElementById('top-navbar');
   const spaMain = document.getElementById('spaMain');
 
   if (mobile && navbar && spaMain && navbar.offsetHeight > 0) {
-    const nextPad = `${navbar.offsetHeight}px`;
+    const nextPad = `${navbar.offsetHeight + 12}px`;
     if (spaMain.style.paddingTop !== nextPad) spaMain.style.paddingTop = nextPad;
   }
 
@@ -54,9 +54,8 @@ function fit() {
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch)}px`);
     stage.style.zoom = '';
     stage.style.transform = '';
-    if (navbar) navbar.style.transform = '';
     if (spaMain && navbar && navbar.offsetHeight > 0) {
-      spaMain.style.paddingTop = `${navbar.offsetHeight}px`;
+      spaMain.style.paddingTop = `${navbar.offsetHeight + 12}px`;
     }
     document.body.style.height = '';
     if (modalRoot) modalRoot.style.transform = '';
@@ -67,9 +66,8 @@ function fit() {
     document.documentElement.style.setProperty('--boot-zoom', String(s));
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
 
-    // Modal root & fixed navbar berada di luar #stage agar position: fixed sinkron di seluruh skala zoom
+    // Modal root berskala mengikuti stage; #top-navbar murni fixed 100% tanpa transform agar konteks fixed tetap paten
     if (modalRoot) modalRoot.style.transform = `scale(${s})`;
-    if (navbar) navbar.style.transform = `scale(${s})`;
     if (spaMain) spaMain.style.paddingTop = '';
 
     if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1')) {
@@ -1058,12 +1056,19 @@ function handleAuthNavClick() {
 // 7. ROUTING SPA BERBASIS HASH (#beranda, #konser, #kontak) & CLEANUP TIMER
 // ============================================================================
 
-const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-test'];
+const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-war'];
 let ordersAbortController = null;
 let stressTestController = null;
 
+function normalizePageKey(input) {
+  const cleaned = String(input || '').replace(/^#\/?/, '').replace(/^page-/, '').toLowerCase();
+  if (cleaned === 'hasil-test') return 'hasil-war';
+  return VALID_SPA_PAGES.includes(cleaned) ? cleaned : 'beranda';
+}
+
 function resolvePageFromLocation() {
-  const hash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+  const hash = (window.location.hash || '').replace(/^#\/?/, '').replace(/^page-/, '').toLowerCase();
+  if (hash === 'hasil-test') return 'hasil-war';
   if (VALID_SPA_PAGES.includes(hash)) return hash;
 
   const path = (window.location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
@@ -1071,7 +1076,7 @@ function resolvePageFromLocation() {
   if (path === '/riwayat') return 'riwayat';
   if (path === '/kontak' || path === '/contact.html') return 'kontak';
   if (path === '/live-test') return 'live-test';
-  if (path === '/hasil-test') return 'hasil-test';
+  if (path === '/hasil-test' || path === '/hasil-war') return 'hasil-war';
   return 'beranda';
 }
 
@@ -1103,8 +1108,10 @@ function stopTicketBookingTimers(targetPage) {
 }
 
 function syncActiveNavByRoute(activeKey = state.activePage) {
-  document.querySelectorAll('.nav-link[data-page]').forEach((link) => {
-    const isCurrent = link.dataset.page === activeKey;
+  const expectedTarget = `page-${activeKey}`;
+  document.querySelectorAll('.nav-link[data-target], .nav-link[data-page]').forEach((link) => {
+    const linkKey = normalizePageKey(link.dataset.target || link.dataset.page);
+    const isCurrent = link.dataset.target === expectedTarget || linkKey === activeKey;
     link.classList.toggle('active', isCurrent);
     if (isCurrent) {
       link.setAttribute('aria-current', 'page');
@@ -1115,12 +1122,11 @@ function syncActiveNavByRoute(activeKey = state.activePage) {
 }
 
 /**
- * Centralized SPA router: clears active booking timers/intervals, switches visible
- * `.page-section` containers with `.hidden`, and updates active navbar state without jitter.
+ * Centralized SPA router: stops booking countdown timers, hides all `.page-section`
+ * elements via `.hidden`, reveals the target section, syncs `.active`, and resets scroll.
  */
-function navigateTo(route, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
-  const normalized = String(route || '').replace(/^#\/?/, '').toLowerCase();
-  const targetPage = VALID_SPA_PAGES.includes(normalized) ? normalized : 'beranda';
+function switchPage(targetPageId, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
+  const targetPage = normalizePageKey(targetPageId);
 
   closeNavAccountDropdown();
   closeAllAutocompletes();
@@ -1131,9 +1137,9 @@ function navigateTo(route, { updateHash = true, scrollToTop = true, forceRefresh
   state.activePage = targetPage;
   document.documentElement.setAttribute('data-active-page', targetPage);
 
-  // Sembunyikan seluruh section halaman lain secara instan dan tampilkan target
-  document.querySelectorAll('.page-section[data-page-section], .spa-page[data-page-section]').forEach((section) => {
-    const isTarget = section.dataset.pageSection === targetPage;
+  // Sembunyikan seluruh section halaman dengan .hidden secara instan dan tampilkan target
+  document.querySelectorAll('.page-section').forEach((section) => {
+    const isTarget = section.id === `page-${targetPage}` || section.dataset.pageSection === targetPage;
     section.classList.toggle('is-active', isTarget);
     section.classList.toggle('hidden', !isTarget);
     section.hidden = !isTarget;
@@ -1162,35 +1168,35 @@ function navigateTo(route, { updateHash = true, scrollToTop = true, forceRefresh
     fetchMyOrders();
   } else if (targetPage === 'live-test') {
     refreshLiveTestQuota();
-  } else if (targetPage === 'hasil-test') {
+  } else if (targetPage === 'hasil-war') {
     renderHasilWarTestPage();
   }
 
   fit();
   if (scrollToTop) {
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }
 }
 
-const switchPage = navigateTo;
-window.navigateTo = navigateTo;
-window.switchPage = navigateTo;
+const navigateTo = switchPage;
+window.switchPage = switchPage;
+window.navigateTo = switchPage;
 
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
-    const navTarget = e.target.closest('a[data-page]');
+    const navTarget = e.target.closest('a[data-target], a[data-page]');
     if (!navTarget) return;
     e.preventDefault();
-    const targetPage = navTarget.dataset.page || navTarget.getAttribute('href') || 'beranda';
-    navigateTo(targetPage);
+    const targetPage = navTarget.dataset.target || navTarget.dataset.page || navTarget.getAttribute('href') || 'page-beranda';
+    switchPage(targetPage);
   });
 
   window.addEventListener('hashchange', () => {
-    navigateTo(resolvePageFromLocation(), { updateHash: false });
+    switchPage(resolvePageFromLocation(), { updateHash: false });
   });
 
   window.addEventListener('popstate', () => {
-    navigateTo(resolvePageFromLocation(), { updateHash: false });
+    switchPage(resolvePageFromLocation(), { updateHash: false });
   });
 }
 
@@ -2753,7 +2759,7 @@ function initGlobalOverlayHandlers() {
     if (!e.target.closest('.search-field-pill')) {
       closeAllAutocompletes();
     }
-    if (!e.target.closest('#navbar')) {
+    if (!e.target.closest('#top-navbar')) {
       closeNavAccountDropdown();
     }
   });

@@ -343,7 +343,7 @@ const artificialDelay = (min = 30, max = 60) => {
 // ============================================================================
 
 const PAGE_ROUTES = [
-  { paths: ['/', '/index.html', '/konser', '/concerts.html', '/riwayat', '/kontak', '/contact.html', '/live-test', '/hasil-test'], file: 'index.html' },
+  { paths: ['/', '/index.html', '/konser', '/concerts.html', '/riwayat', '/kontak', '/contact.html', '/live-test', '/hasil-test', '/hasil-war'], file: 'index.html' },
 ];
 
 PAGE_ROUTES.forEach(({ paths, file }) => {

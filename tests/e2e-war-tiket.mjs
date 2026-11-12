@@ -193,6 +193,7 @@ async function main() {
       { path: '/riwayat', expectHeroSearch: false },
       { path: '/kontak', expectHeroSearch: false },
       { path: '/live-test', expectHeroSearch: false },
+      { path: '/hasil-war', expectHeroSearch: false },
       { path: '/hasil-test', expectHeroSearch: false },
     ];
 
@@ -269,11 +270,11 @@ async function main() {
       assert.equal(audit.hasVisibleHeroSearch, r.expectHeroSearch, `Single search form below hero banner mismatch on ${r.path}`);
       assert.ok(audit.totalCls <= 0.05, `Unexpected CLS bounce on ${r.path}: ${audit.totalCls}`);
       assert.equal(audit.navPosition, 'fixed', `Navbar must use fixed positioning on ${r.path}, got ${audit.navPosition}`);
-      assert.ok(audit.navZIndex >= 1000, `Navbar z-index must be >= 1000, got ${audit.navZIndex}`);
-      assert.equal(audit.navHeight, 116, `Navbar explicit height must be 116px on ${r.path}, got ${audit.navHeight}`);
-      assert.ok(audit.mainPaddingTop >= 116, `Main padding-top must clear fixed navbar on ${r.path}, got ${audit.mainPaddingTop}`);
+      assert.equal(audit.navZIndex, 9999, `Navbar z-index must be 9999 on ${r.path}, got ${audit.navZIndex}`);
+      assert.equal(audit.navHeight, 70, `Navbar explicit height must be 70px on ${r.path}, got ${audit.navHeight}`);
+      assert.ok(audit.mainPaddingTop >= 70, `Main padding-top must clear fixed navbar on ${r.path}, got ${audit.mainPaddingTop}`);
       assert.equal(audit.navTop, 0, `Navbar must start at top: 0 on ${r.path}, got ${audit.navTop}`);
-      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px stage on ${r.path}`);
+      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px viewport on ${r.path}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
         assert.ok(audit.navStickyAfterScroll, `Navbar must stay locked at top: 0 when scrolling down on ${r.path}`);
@@ -308,6 +309,75 @@ async function main() {
     })`);
     assert.equal(directHashCheck.page, 'kontak', 'Direct /#kontak URL must render Kontak immediately');
     assert.deepEqual(directHashCheck.navXs, baselineNavXs, 'Direct /#kontak navbar X-coords must match baseline with 0px shift');
+
+    // Verify 6 data-target attributes, zero ancestor transform/filter/perspective/contain, and 1280x720 fixed scroll
+    const fixedGuardAudit = await cdp.eval(`(() => {
+      const nav = document.getElementById('top-navbar');
+      const targets = Array.from(document.querySelectorAll('#top-navbar .nav-link')).map(el => el.dataset.target);
+      const chain = [nav, document.body, document.documentElement].map(el => {
+        const st = getComputedStyle(el);
+        return {
+          tag: el.id || el.tagName,
+          transform: st.transform,
+          filter: st.filter,
+          backdropFilter: st.backdropFilter,
+          perspective: st.perspective,
+          contain: st.contain,
+        };
+      });
+      return {
+        parentTag: nav?.parentElement?.tagName || '',
+        targets,
+        chain,
+      };
+    })()`);
+    assert.equal(fixedGuardAudit.parentTag, 'BODY', '#top-navbar must be direct child of <body>');
+    assert.deepEqual(fixedGuardAudit.targets, [
+      'page-beranda',
+      'page-konser',
+      'page-riwayat',
+      'page-kontak',
+      'page-live-test',
+      'page-hasil-war',
+    ], `All 6 navbar links must expose expected data-target IDs, got ${JSON.stringify(fixedGuardAudit.targets)}`);
+    for (const c of fixedGuardAudit.chain) {
+      assert.equal(c.transform, 'none', `${c.tag} must not set transform (breaks position:fixed), got ${c.transform}`);
+      assert.equal(c.filter, 'none', `${c.tag} must not set filter, got ${c.filter}`);
+      assert.equal(c.backdropFilter, 'none', `${c.tag} must not set backdrop-filter, got ${c.backdropFilter}`);
+      assert.equal(c.perspective, 'none', `${c.tag} must not set perspective, got ${c.perspective}`);
+      assert.equal(c.contain, 'none', `${c.tag} must not set contain, got ${c.contain}`);
+    }
+
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await cdp.goto(`${BASE_URL}/`);
+    await cdp.waitFor(`() => typeof window.fit === 'function'`);
+    const nav1280 = await cdp.eval(`(async () => {
+      window.scrollTo({ top: 600, left: 0, behavior: 'instant' });
+      await new Promise(r => setTimeout(r, 80));
+      const rect = document.getElementById('top-navbar').getBoundingClientRect();
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      return {
+        scrollY: window.scrollY,
+        top: Math.round(rect.top),
+        height: Math.round(rect.height),
+        width: Math.round(rect.width),
+      };
+    })()`);
+    assert.equal(nav1280.top, 0, `Navbar at 1280x720 must remain at top: 0 when scrolled, got ${JSON.stringify(nav1280)}`);
+    assert.equal(nav1280.height, 70, `Navbar height at 1280x720 must be 70px, got ${JSON.stringify(nav1280)}`);
+    assert.equal(nav1280.width, 1280, `Navbar width at 1280x720 must span 1280px, got ${JSON.stringify(nav1280)}`);
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1440,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+
     console.log('  OK: Multi-page routing, zero dead links, SPA 404-fallback, fixed navbar, and 3-col footer passed.');
 
     // -----------------------------------------------------------------------
@@ -437,7 +507,7 @@ async function main() {
         ticketPaperDisplay: getComputedStyle(document.getElementById('eTicketPrintArea')).display,
       };
     })()`);
-    assert.equal(printVisibility.stageDisplay, 'none', '#stage (containing navbar & footer) must be hidden in print media');
+    assert.equal(printVisibility.stageDisplay, 'none', '#stage (containing footer) must be hidden in print media');
     assert.equal(printVisibility.navbarRectSize, 0, 'Navbar rendered box must collapse to 0 in print media');
     assert.equal(printVisibility.footerRectSize, 0, 'Footer rendered box must collapse to 0 in print media');
     assert.equal(printVisibility.workerDisplay, 'none', 'Worker host debug badge must be hidden in print media');
@@ -479,9 +549,9 @@ async function main() {
     assert.ok(stressOut.workers >= 1, 'Live stress test must display responding Swarm container workers');
     assert.ok(!stressOut.quotaBeforeReset.includes('496/500'), `Quota must decrease after war test + E-05 checkout, got ${stressOut.quotaBeforeReset}`);
 
-    // Verify new "Hasil War Test" menu displays latest summary + execution history row + worker distribution
-    await cdp.eval(`document.querySelector('.nav-link[data-page="hasil-test"]').click()`);
-    await cdp.waitFor(`() => document.getElementById('page-hasil-test')?.classList.contains('is-active') && document.querySelectorAll('#warTestHistoryWrap table tbody tr').length >= 1`, 8000);
+    // Verify "Hasil War Test" menu (#page-hasil-war) displays latest summary + execution history row + worker distribution
+    await cdp.eval(`document.querySelector('.nav-link[data-target="page-hasil-war"]').click()`);
+    await cdp.waitFor(`() => document.getElementById('page-hasil-war')?.classList.contains('is-active') && document.querySelectorAll('#warTestHistoryWrap table tbody tr').length >= 1`, 8000);
     const hasilAudit = await cdp.eval(`({
       countText: document.getElementById('hasilLatestCount')?.textContent || '',
       rows: document.querySelectorAll('#warTestHistoryWrap table tbody tr').length,

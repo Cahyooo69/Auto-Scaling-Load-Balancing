@@ -41,7 +41,7 @@ test.describe('Sistem War Tiket Konser Musik - E2E Suite', () => {
   test('[Skenario 2] Multi-Page Navigasi, Stationary Top Navbar, Search Icon & Footer 3 Kolom', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    for (const route of ['/', '/konser', '/kontak', '/live-test', '/hasil-test']) {
+    for (const route of ['/', '/konser', '/kontak', '/live-test', '/hasil-war']) {
       await page.goto(`${BASE_URL}${route}`);
       await expect(page.locator('#btnToggleSearchPanel')).toHaveCount(0);
       await expect(page.locator('#navSearchPanel')).toHaveCount(0);
