@@ -31,13 +31,7 @@ function fit() {
   const cw = document.documentElement.clientWidth || DESIGN_W;
   const ch = document.documentElement.clientHeight || 900;
   const mobile = isMobileViewport();
-  const navbar = document.getElementById('top-navbar');
   const spaMain = document.getElementById('spaMain');
-
-  if (mobile && navbar && spaMain && navbar.offsetHeight > 0) {
-    const nextPad = `${navbar.offsetHeight + 12}px`;
-    if (spaMain.style.paddingTop !== nextPad) spaMain.style.paddingTop = nextPad;
-  }
 
   const nextSig = `${mobile ? 'm' : 'd'}:${cw}:${ch}`;
   if (nextSig === lastFitSignature && stateReady) return;
@@ -54,9 +48,7 @@ function fit() {
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch)}px`);
     stage.style.zoom = '';
     stage.style.transform = '';
-    if (spaMain && navbar && navbar.offsetHeight > 0) {
-      spaMain.style.paddingTop = `${navbar.offsetHeight + 12}px`;
-    }
+    if (spaMain) spaMain.style.paddingTop = '';
     document.body.style.height = '';
     if (modalRoot) modalRoot.style.transform = '';
   } else {
@@ -66,7 +58,6 @@ function fit() {
     document.documentElement.style.setProperty('--boot-zoom', String(s));
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
 
-    // Modal root berskala mengikuti stage; #top-navbar murni fixed 100% tanpa transform agar konteks fixed tetap paten
     if (modalRoot) modalRoot.style.transform = `scale(${s})`;
     if (spaMain) spaMain.style.paddingTop = '';
 

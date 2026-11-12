@@ -246,7 +246,8 @@ async function main() {
           navWidth: Math.round(navRect0.width),
           heroBelowNav: heroRect.top >= navRect0.bottom - 1,
           scrollYAfter,
-          navStickyAfterScroll: Math.abs(navRectAfter.top) <= 1,
+          navScrolledAway: navRectAfter.top < -200,
+          navDocTopAfterScroll: Math.round(navRectAfter.top + scrollYAfter),
           footerCols,
           statusText: document.getElementById('footerClusterStatus')?.textContent?.trim() || '',
           hasResetBtn: Boolean(document.querySelector('.btn-footer-reset')),
@@ -269,15 +270,15 @@ async function main() {
       assert.equal(audit.legacyNavSearchCount, 0, `Floating navbar search icon/overlay must be removed on ${r.path}`);
       assert.equal(audit.hasVisibleHeroSearch, r.expectHeroSearch, `Single search form below hero banner mismatch on ${r.path}`);
       assert.ok(audit.totalCls <= 0.05, `Unexpected CLS bounce on ${r.path}: ${audit.totalCls}`);
-      assert.equal(audit.navPosition, 'fixed', `Navbar must use fixed positioning on ${r.path}, got ${audit.navPosition}`);
-      assert.equal(audit.navZIndex, 9999, `Navbar z-index must be 9999 on ${r.path}, got ${audit.navZIndex}`);
+      assert.equal(audit.navPosition, 'relative', `Navbar must stay stationary at top of document (relative) on ${r.path}, got ${audit.navPosition}`);
+      assert.equal(audit.navZIndex, 100, `Navbar z-index must be 100 on ${r.path}, got ${audit.navZIndex}`);
       assert.equal(audit.navHeight, 70, `Navbar explicit height must be 70px on ${r.path}, got ${audit.navHeight}`);
-      assert.ok(audit.mainPaddingTop >= 70, `Main padding-top must clear fixed navbar on ${r.path}, got ${audit.mainPaddingTop}`);
+      assert.ok(audit.mainPaddingTop >= 16, `Main padding-top must space cleanly below navbar on ${r.path}, got ${audit.mainPaddingTop}`);
       assert.equal(audit.navTop, 0, `Navbar must start at top: 0 on ${r.path}, got ${audit.navTop}`);
-      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px viewport on ${r.path}`);
+      assert.equal(audit.navWidth, 1440, `Navbar width must span full 1440px stage on ${r.path}`);
       assert.ok(audit.heroBelowNav, `Hero must start cleanly below navbar on ${r.path}`);
       if (audit.scrollYAfter > 200) {
-        assert.ok(audit.navStickyAfterScroll, `Navbar must stay locked at top: 0 when scrolling down on ${r.path}`);
+        assert.ok(audit.navScrolledAway, `Navbar must stay at top of page (not follow scroll down) on ${r.path}, got top=${audit.navDocTopAfterScroll}`);
       }
       assert.equal(audit.footerCols, 3, `Expected 3 footer columns on desktop for ${r.path}, got ${audit.footerCols}`);
       assert.ok(audit.statusText.length > 0 && audit.hasResetBtn, `Footer cluster status or reset button missing on ${r.path}`);
@@ -310,43 +311,24 @@ async function main() {
     assert.equal(directHashCheck.page, 'kontak', 'Direct /#kontak URL must render Kontak immediately');
     assert.deepEqual(directHashCheck.navXs, baselineNavXs, 'Direct /#kontak navbar X-coords must match baseline with 0px shift');
 
-    // Verify 6 data-target attributes, zero ancestor transform/filter/perspective/contain, and 1280x720 fixed scroll
-    const fixedGuardAudit = await cdp.eval(`(() => {
+    // Verify 6 data-target attributes, stationary relative placement in #stage, and 1280x720 scroll-away behavior
+    const navStructureAudit = await cdp.eval(`(() => {
       const nav = document.getElementById('top-navbar');
       const targets = Array.from(document.querySelectorAll('#top-navbar .nav-link')).map(el => el.dataset.target);
-      const chain = [nav, document.body, document.documentElement].map(el => {
-        const st = getComputedStyle(el);
-        return {
-          tag: el.id || el.tagName,
-          transform: st.transform,
-          filter: st.filter,
-          backdropFilter: st.backdropFilter,
-          perspective: st.perspective,
-          contain: st.contain,
-        };
-      });
       return {
-        parentTag: nav?.parentElement?.tagName || '',
+        parentId: nav?.parentElement?.id || '',
         targets,
-        chain,
       };
     })()`);
-    assert.equal(fixedGuardAudit.parentTag, 'BODY', '#top-navbar must be direct child of <body>');
-    assert.deepEqual(fixedGuardAudit.targets, [
+    assert.equal(navStructureAudit.parentId, 'stage', '#top-navbar must live at top of #stage document flow');
+    assert.deepEqual(navStructureAudit.targets, [
       'page-beranda',
       'page-konser',
       'page-riwayat',
       'page-kontak',
       'page-live-test',
       'page-hasil-war',
-    ], `All 6 navbar links must expose expected data-target IDs, got ${JSON.stringify(fixedGuardAudit.targets)}`);
-    for (const c of fixedGuardAudit.chain) {
-      assert.equal(c.transform, 'none', `${c.tag} must not set transform (breaks position:fixed), got ${c.transform}`);
-      assert.equal(c.filter, 'none', `${c.tag} must not set filter, got ${c.filter}`);
-      assert.equal(c.backdropFilter, 'none', `${c.tag} must not set backdrop-filter, got ${c.backdropFilter}`);
-      assert.equal(c.perspective, 'none', `${c.tag} must not set perspective, got ${c.perspective}`);
-      assert.equal(c.contain, 'none', `${c.tag} must not set contain, got ${c.contain}`);
-    }
+    ], `All 6 navbar links must expose expected data-target IDs, got ${JSON.stringify(navStructureAudit.targets)}`);
 
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 1280,
@@ -357,20 +339,22 @@ async function main() {
     await cdp.goto(`${BASE_URL}/`);
     await cdp.waitFor(`() => typeof window.fit === 'function'`);
     const nav1280 = await cdp.eval(`(async () => {
+      const initialTop = Math.round(document.getElementById('top-navbar').getBoundingClientRect().top);
       window.scrollTo({ top: 600, left: 0, behavior: 'instant' });
       await new Promise(r => setTimeout(r, 80));
       const rect = document.getElementById('top-navbar').getBoundingClientRect();
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       return {
         scrollY: window.scrollY,
-        top: Math.round(rect.top),
+        initialTop,
+        topAfterScroll: Math.round(rect.top),
         height: Math.round(rect.height),
         width: Math.round(rect.width),
       };
     })()`);
-    assert.equal(nav1280.top, 0, `Navbar at 1280x720 must remain at top: 0 when scrolled, got ${JSON.stringify(nav1280)}`);
-    assert.equal(nav1280.height, 70, `Navbar height at 1280x720 must be 70px, got ${JSON.stringify(nav1280)}`);
-    assert.equal(nav1280.width, 1280, `Navbar width at 1280x720 must span 1280px, got ${JSON.stringify(nav1280)}`);
+    assert.equal(nav1280.initialTop, 0, `Navbar at 1280x720 must start at top: 0, got ${JSON.stringify(nav1280)}`);
+    assert.ok(nav1280.topAfterScroll < -200, `Navbar at 1280x720 must stay at page top and not follow scroll down, got ${JSON.stringify(nav1280)}`);
+    assert.equal(Math.round(nav1280.height), Math.round(70 * (1280 / 1440)), `Scaled navbar height at 1280x720 mismatch: ${JSON.stringify(nav1280)}`);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 1440,
       height: 900,
@@ -378,7 +362,7 @@ async function main() {
       mobile: false,
     });
 
-    console.log('  OK: Multi-page routing, zero dead links, SPA 404-fallback, fixed navbar, and 3-col footer passed.');
+    console.log('  OK: Multi-page routing, zero dead links, SPA 404-fallback, top-stationary relative navbar, and 3-col footer passed.');
 
     // -----------------------------------------------------------------------
     // SKENARIO 2b: SPA Hash Navigation (#beranda <-> #konser <-> #kontak) & Timer Cleanup

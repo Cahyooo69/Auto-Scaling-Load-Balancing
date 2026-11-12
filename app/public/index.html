@@ -47,65 +47,63 @@
 <body>
   <script>if (document.documentElement.classList.contains('wt-mobile')) document.body.classList.add('is-mobile');</script>
 
-  <!-- TOP NAVBAR STANDALONE DI BAWAH <body> (position: fixed; height: 70px; z-index: 9999; zero transform parent) -->
-  <header id="top-navbar" class="navbar" aria-label="Navigasi Utama">
-    <div class="navbar-inner">
-      <a href="#beranda" class="nav-brand" data-target="page-beranda" data-page="beranda">
-        <div class="nav-brand-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path
-              d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
-            <path d="M13 5v2" />
-            <path d="M13 17v2" />
-            <path d="M13 11v2" />
-          </svg>
-        </div>
-        <div class="nav-brand-text">
-          <span class="brand-line-1">SISTEM WAR TIKET</span>
-          <span class="brand-line-2">KONSER MUSIK</span>
-        </div>
-      </a>
-
-      <nav aria-label="Menu Utama">
-        <ul class="nav-menu">
-          <li><a href="#beranda" class="nav-link active" data-target="page-beranda" data-page="beranda" aria-current="page">Beranda</a></li>
-          <li><a href="#konser" class="nav-link" data-target="page-konser" data-page="konser">Konser</a></li>
-          <li><a href="#riwayat" class="nav-link" data-target="page-riwayat" data-page="riwayat">Riwayat Pemesanan</a></li>
-          <li><a href="#kontak" class="nav-link" data-target="page-kontak" data-page="kontak">Kontak</a></li>
-          <li><a href="#live-test" class="nav-link" data-target="page-live-test" data-page="live-test">Live Test</a></li>
-          <li><a href="#hasil-war" class="nav-link" data-target="page-hasil-war" data-page="hasil-war">Hasil War Test</a></li>
-        </ul>
-      </nav>
-
-      <div class="nav-actions">
-        <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-            <polyline points="10 17 15 12 10 7" />
-            <line x1="15" y1="12" x2="3" y2="12" />
-          </svg>
-          <span id="navAuthLabel">Masuk</span>
-        </button>
-      </div>
-
-      <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
-        <div class="nav-account-meta">
-          <div id="dropdownUserName"
-            style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
-            User</div>
-          <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
-        </div>
-        <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
-          <span>Keluar Akun</span>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Kanvas skala tetap 1440px agar proporsi visual seragam di semua zoom -->
+  <!-- Kanvas skala tetap 1440px; top navbar di puncak aliran dokumen agar tetap di atas saat scroll -->
   <div id="stage">
+    <header id="top-navbar" class="navbar" aria-label="Navigasi Utama">
+      <div class="navbar-inner">
+        <a href="#beranda" class="nav-brand" data-target="page-beranda" data-page="beranda">
+          <div class="nav-brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path
+                d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+              <path d="M13 5v2" />
+              <path d="M13 17v2" />
+              <path d="M13 11v2" />
+            </svg>
+          </div>
+          <div class="nav-brand-text">
+            <span class="brand-line-1">SISTEM WAR TIKET</span>
+            <span class="brand-line-2">KONSER MUSIK</span>
+          </div>
+        </a>
+
+        <nav aria-label="Menu Utama">
+          <ul class="nav-menu">
+            <li><a href="#beranda" class="nav-link active" data-target="page-beranda" data-page="beranda" aria-current="page">Beranda</a></li>
+            <li><a href="#konser" class="nav-link" data-target="page-konser" data-page="konser">Konser</a></li>
+            <li><a href="#riwayat" class="nav-link" data-target="page-riwayat" data-page="riwayat">Riwayat Pemesanan</a></li>
+            <li><a href="#kontak" class="nav-link" data-target="page-kontak" data-page="kontak">Kontak</a></li>
+            <li><a href="#live-test" class="nav-link" data-target="page-live-test" data-page="live-test">Live Test</a></li>
+            <li><a href="#hasil-war" class="nav-link" data-target="page-hasil-war" data-page="hasil-war">Hasil War Test</a></li>
+          </ul>
+        </nav>
+
+        <div class="nav-actions">
+          <button type="button" id="navBtnAuth" class="btn-pill-primary" onclick="handleAuthNavClick()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            <span id="navAuthLabel">Masuk</span>
+          </button>
+        </div>
+
+        <div id="navAccountDropdown" class="nav-dropdown-panel nav-account-panel" role="menu" aria-label="Menu Akun">
+          <div class="nav-account-meta">
+            <div id="dropdownUserName"
+              style="font-family: var(--font-heading); font-weight: 900; font-size: 16px; color: var(--color-forest);">
+              User</div>
+            <div id="dropdownUserEmail" style="font-size: 13px; color: var(--color-text-muted);">user@wartiket.id</div>
+          </div>
+          <button type="button" id="navBtnLogout" class="btn-logout-chip" onclick="handleLogout()">
+            <span>Keluar Akun</span>
+          </button>
+        </div>
+      </div>
+    </header>
 
     <main id="spaMain">
       <!-- ==================== HALAMAN 1: BERANDA ==================== -->
