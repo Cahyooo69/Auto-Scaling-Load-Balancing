@@ -50,7 +50,7 @@ function sendSingleHttpPost(targetUrl, payloadStr, agent, attempt = 0) {
   });
 }
 
-function createBookingController({ pool, port, getDbReady, checkDbConnection }) {
+function createBookingController({ pool, redis, getRedisReady, port, getDbReady, checkDbConnection }) {
   async function getMyOrders(req, res) {
     const userId = parseInt(req.authUser?.id, 10);
     if (!userId) {
@@ -129,6 +129,11 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
     const count = Math.max(1, Math.min(rawCount, 1000));
     const concertId = parseInt(req.body?.concertId, 10) || 1;
     const userId = parseInt(req.body?.userId, 10) || 1;
+
+    // Notify auto-scaler of active cluster burst so fast spikes trigger scale-up before CPU averages lag
+    if (count >= 100 && redis && getRedisReady?.()) {
+      redis.set('autoscaler:demand', String(count), 'EX', count >= 500 ? 8 : 5).catch(() => {});
+    }
 
     const primaryTarget =
       process.env.STRESS_TARGET_URL ||

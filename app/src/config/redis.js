@@ -99,8 +99,8 @@ const redis = new Redis({
   port: REDIS_PORT,
   maxRetriesPerRequest: 2,
   enableOfflineQueue: false,
-  connectTimeout: 4000,
-  commandTimeout: 5000,
+  connectTimeout: 3000,
+  commandTimeout: 3000,
   retryStrategy: (times) => Math.min(times * 100, 2000),
   lazyConnect: true,
 });

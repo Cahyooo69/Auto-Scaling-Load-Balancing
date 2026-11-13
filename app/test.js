@@ -170,12 +170,60 @@ function testJwtHelpers() {
   testJwtHelpers();
   await testRedisLockHelpers();
   await testAuthPasswordCheck();
+  testAutoscalerHelpers();
   console.log(' All unit tests passed successfully.');
   process.exit(0);
 })().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+function testAutoscalerHelpers() {
+  console.log('Running testAutoscalerHelpers...');
+  const { calcQuotaCpuPct, decideScaleAction, buildReplicaConfig } = require('./autoscaler');
+
+  // 1. CPU quota normalization: 25% of 1 host core on a 0.25-CPU container = 100% quota
+  const pct = calcQuotaCpuPct(
+    {
+      cpu_stats: { cpu_usage: { total_usage: 250000000 }, system_cpu_usage: 12000000000, online_cpus: 12 },
+      precpu_stats: { cpu_usage: { total_usage: 0 }, system_cpu_usage: 0 },
+    },
+    250000000
+  );
+  assert.strictEqual(pct, 100, `Expected 100% quota CPU, got ${pct}`);
+
+  // 2. Scale up on high quota CPU
+  const up = decideScaleAction({
+    replicas: 3,
+    minReplicas: 3,
+    maxReplicas: 8,
+    scaleStep: 2,
+    avgCpuPct: 45,
+    peakCpuPct: 70,
+    healthOk: true,
+    healthMs: 40,
+    nowMs: 20000,
+    lastScaleUpAt: 0,
+  });
+  assert.strictEqual(up.target, 5, 'Should scale 3 -> 5 on high quota CPU');
+
+  // 3. Replica config omits Hostname so each worker gets unique container ID
+  const cfg = buildReplicaConfig(
+    {
+      Config: {
+        Hostname: 'oldhost',
+        Image: 'wartiket-app:latest',
+        Labels: { 'com.docker.compose.project': 'p', 'com.docker.compose.container-number': '1' },
+      },
+      HostConfig: { NetworkMode: 'net', NanoCpus: 250000000, Memory: 268435456 },
+      NetworkSettings: { Networks: { net: {} } },
+    },
+    4
+  );
+  assert.strictEqual(cfg.Hostname, undefined, 'Cloned container config must not reuse template Hostname');
+  assert.strictEqual(cfg.Labels['com.docker.compose.container-number'], '4');
+  assert.deepStrictEqual(cfg.NetworkingConfig.EndpointsConfig.net.Aliases, ['app']);
+}
 
 async function testAuthPasswordCheck() {
   console.log('Running testAuthPasswordCheck...');

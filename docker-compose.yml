@@ -2,6 +2,7 @@ services:
   # Redis: In-memory store for atomic ticket locking & inventory management (with AOF persistence)
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60 1", "--dir", "/data"]
     volumes:
       - redis-data:/data
@@ -30,6 +31,7 @@ services:
   # Relational Database: PostgreSQL 16 (ACID storage for users, concerts, seats, transactions)
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=128MB"]
     environment:
       - POSTGRES_DB=wartiket_db
@@ -37,6 +39,8 @@ services:
       - POSTGRES_PASSWORD=wartiket_secret
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./app/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./app/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     networks:
       - wartiket-net
     deploy:
@@ -62,12 +66,15 @@ services:
   # Node.js API Worker Service (3 initial replicas -> up to 8 replicas on scale)
   app:
     image: wartiket-app:latest
+    restart: unless-stopped
     build:
       context: ./app
       dockerfile: Dockerfile
     depends_on:
-      - redis
-      - db
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -111,11 +118,13 @@ services:
   # Nginx: Reverse Proxy & Load Balancer (1 replica agar port 80/443 tidak bentrok saat docker-compose up)
   nginx:
     image: wartiket-nginx:latest
+    restart: unless-stopped
     build:
       context: ./nginx
       dockerfile: Dockerfile
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -140,6 +149,40 @@ services:
       timeout: 3s
       retries: 3
       start_period: 3s
+
+  # Auto-Scaler: Monitors Compose/Swarm CPU quota, latency & traffic bursts -> scales app (3..8)
+  autoscaler:
+    image: wartiket-app:latest
+    restart: unless-stopped
+    command: ["node", "autoscaler.js"]
+    depends_on:
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nginx:
+        condition: service_healthy
+    environment:
+      - MIN_REPLICAS=3
+      - MAX_REPLICAS=8
+      - SCALE_STEP=2
+      - SCALE_UP_CPU=40
+      - SCALE_DOWN_CPU=15
+      - SCALE_UP_LATENCY_MS=120
+      - HEALTH_URL=http://nginx/health
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - COMPOSE_PROJECT=auto-scaling-load-balancing-main
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
 
 networks:
   wartiket-net:

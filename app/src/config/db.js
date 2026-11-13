@@ -17,7 +17,7 @@ const pool = new Pool({
   password: DB_PASSWORD,
   max: DB_POOL_MAX,
   idleTimeoutMillis: 15000,
-  connectionTimeoutMillis: 8000,
+  connectionTimeoutMillis: 3000,
   statement_timeout: 10000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
