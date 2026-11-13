@@ -27,6 +27,7 @@ const { createApiRouter } = require('./src/routes/api');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', true);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -37,6 +38,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const PAGE_ROUTES = [
   '/',
   '/index.html',
+  '/beranda',
   '/konser',
   '/concerts.html',
   '/riwayat',

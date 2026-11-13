@@ -7,6 +7,7 @@
  */
 const assert = require('node:assert/strict');
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const BASE_URL = (process.env.TARGET_URL || 'http://localhost').replace(/\/+$/, '');
 const CONCURRENT_USERS = 20;
 const TARGET_CONCERT_ID = 1;

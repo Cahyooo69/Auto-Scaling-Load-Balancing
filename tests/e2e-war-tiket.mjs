@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const BASE_URL = (process.env.TARGET_URL || 'http://localhost').replace(/\/+$/, '');
 const EDGE_PATH = process.env.EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const CDP_PORT = Number(process.env.CDP_PORT || 9235);
@@ -115,6 +116,7 @@ async function main() {
       `--user-data-dir=${USER_DATA}`,
       '--headless=new',
       '--disable-gpu',
+      '--ignore-certificate-errors',
       '--window-size=1440,900',
       'about:blank',
     ],
