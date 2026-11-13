@@ -1324,6 +1324,13 @@ html.wt-mobile .navbar {
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity 0.2s ease;
+}
+
+.footer-brand-row:hover {
+  opacity: 0.9;
 }
 
 .footer-brand-icon {
@@ -1379,11 +1386,14 @@ html.wt-mobile .navbar {
 .footer-links a {
   color: #D6E8CD;
   text-decoration: none;
+  cursor: pointer;
+  pointer-events: auto;
   transition: color 0.2s ease, transform 0.2s ease;
   display: inline-block;
 }
 
-.footer-links a:hover {
+.footer-links a:hover,
+.footer-links a.active {
   color: var(--color-white);
   transform: translateX(3px);
 }
@@ -1391,6 +1401,23 @@ html.wt-mobile .navbar {
 .footer-highlight {
   color: var(--color-white);
   font-weight: 800;
+}
+
+.footer-domain-link {
+  color: #8CE071 !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  pointer-events: auto;
+  font-weight: 800;
+  display: inline-block;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease, transform 0.2s ease;
+}
+
+.footer-domain-link:hover {
+  color: var(--color-white) !important;
+  text-decoration-color: var(--color-white);
+  transform: translateY(-1px);
 }
 
 .footer-status-pill {

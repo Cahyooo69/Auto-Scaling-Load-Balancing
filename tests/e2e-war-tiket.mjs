@@ -418,22 +418,22 @@ async function main() {
     assert.deepEqual(spaAudit.s0.visiblePages, ['beranda']);
 
     assert.equal(spaAudit.s1.alive, true, 'Switching to Konser must NOT reload page');
-    assert.equal(spaAudit.s1.hash, '#konser');
+    assert.equal(spaAudit.s1.hash, '', 'Clean URL must have NO hash (#) when on Konser');
     assert.deepEqual(spaAudit.s1.activeNavs, ['konser']);
     assert.deepEqual(spaAudit.s1.visiblePages, ['konser']);
     assert.equal(spaAudit.s1.concertFetchCalls, 1, 'Entering Konser must fetch /api/concerts exactly once');
 
     assert.equal(spaAudit.s2.alive, true, 'Switching to Kontak must NOT reload page');
-    assert.equal(spaAudit.s2.hash, '#kontak');
+    assert.equal(spaAudit.s2.hash, '', 'Clean URL must have NO hash (#) when on Kontak');
     assert.deepEqual(spaAudit.s2.activeNavs, ['kontak']);
     assert.deepEqual(spaAudit.s2.visiblePages, ['kontak']);
     assert.equal(spaAudit.timerCleared, true, 'Ticket booking timer must be stopped on switchPage');
 
     assert.equal(spaAudit.s3.alive, true);
-    assert.equal(spaAudit.s3.hash, '#beranda');
+    assert.equal(spaAudit.s3.hash, '', 'Clean URL must have NO hash (#) when on Beranda');
     assert.deepEqual(spaAudit.s3.activeNavs, ['beranda']);
     assert.deepEqual(spaAudit.s3.visiblePages, ['beranda']);
-    console.log('  OK: Hash SPA routing (#beranda/#konser/#kontak), lazy concert fetch & timer cleanup passed.');
+    console.log('  OK: State-Based SPA clean routing (no hash), lazy concert fetch & timer cleanup passed.');
 
     // -----------------------------------------------------------------------
     // SKENARIO 3 & 4: War E-05 -> E-Ticket + Print/PDF + Conflict + Anti-Stuck

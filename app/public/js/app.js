@@ -838,12 +838,7 @@ function readSearchParamsFromUrl() {
 }
 
 function buildConcertsSearchUrl() {
-  const params = new URLSearchParams();
-  if (state.searchQuery.trim()) params.set('q', state.searchQuery.trim());
-  if (state.selectedCity.trim()) params.set('city', state.selectedCity.trim());
-  if (state.selectedDate.trim()) params.set('date', state.selectedDate.trim());
-  const qs = params.toString();
-  return qs ? `/?${qs}#konser` : '#konser';
+  return '/';
 }
 
 function applyFilters({ syncUrl = false } = {}) {
@@ -864,8 +859,7 @@ function applyFilters({ syncUrl = false } = {}) {
   renderCarousel();
 
   if (syncUrl && isConcertsPage()) {
-    const targetUrl = buildConcertsSearchUrl();
-    window.history.replaceState(null, '', targetUrl);
+    window.history.replaceState({ page: 'konser' }, '', '/');
   }
 }
 
@@ -918,8 +912,7 @@ function handleSearchSubmit(e) {
   if (isConcertsPage()) {
     applyFilters({ syncUrl: true });
   } else {
-    window.history.replaceState(null, '', buildConcertsSearchUrl());
-    switchPage('konser', { updateHash: false });
+    switchPage('konser');
   }
 }
 
@@ -990,8 +983,7 @@ function attachAutocomplete(inputId, dropdownId) {
     if (isConcertsPage()) {
       applyFilters({ syncUrl: true });
     } else {
-      window.history.replaceState(null, '', buildConcertsSearchUrl());
-      switchPage('konser', { updateHash: false });
+      switchPage('konser');
     }
   }
 
@@ -1044,7 +1036,7 @@ function handleAuthNavClick() {
 }
 
 // ============================================================================
-// 7. ROUTING SPA BERBASIS HASH (#beranda, #konser, #kontak) & CLEANUP TIMER
+// 7. ROUTING SPA BERBASIS STATE MURNI (TANPA HASH) & CLEANUP TIMER
 // ============================================================================
 
 const VALID_SPA_PAGES = ['beranda', 'konser', 'riwayat', 'kontak', 'live-test', 'hasil-war'];
@@ -1058,6 +1050,9 @@ function normalizePageKey(input) {
 }
 
 function resolvePageFromLocation() {
+  if (window.history.state && window.history.state.page) {
+    return normalizePageKey(window.history.state.page);
+  }
   const hash = (window.location.hash || '').replace(/^#\/?/, '').replace(/^page-/, '').toLowerCase();
   if (hash === 'hasil-test') return 'hasil-war';
   if (VALID_SPA_PAGES.includes(hash)) return hash;
@@ -1100,7 +1095,7 @@ function stopTicketBookingTimers(targetPage) {
 
 function syncActiveNavByRoute(activeKey = state.activePage) {
   const expectedTarget = `page-${activeKey}`;
-  document.querySelectorAll('.nav-link[data-target], .nav-link[data-page]').forEach((link) => {
+  document.querySelectorAll('.nav-link, .footer-links a').forEach((link) => {
     const linkKey = normalizePageKey(link.dataset.target || link.dataset.page);
     const isCurrent = link.dataset.target === expectedTarget || linkKey === activeKey;
     link.classList.toggle('active', isCurrent);
@@ -1115,8 +1110,9 @@ function syncActiveNavByRoute(activeKey = state.activePage) {
 /**
  * Centralized SPA router: stops booking countdown timers, hides all `.page-section`
  * elements via `.hidden`, reveals the target section, syncs `.active`, and resets scroll.
+ * Keeps URL permanently clean on the official domain without hash (#).
  */
-function switchPage(targetPageId, { updateHash = true, scrollToTop = true, forceRefresh = false } = {}) {
+function switchPage(targetPageId, { updateHistory = true, scrollToTop = true, forceRefresh = false } = {}) {
   const targetPage = normalizePageKey(targetPageId);
 
   closeNavAccountDropdown();
@@ -1139,11 +1135,10 @@ function switchPage(targetPageId, { updateHash = true, scrollToTop = true, force
   syncActiveNavByRoute(targetPage);
   renderMultiSelectBar();
 
-  if (updateHash) {
-    const nextHash = `#${targetPage}`;
-    const nextUrl = window.location.pathname !== '/' ? `/${nextHash}` : nextHash;
-    if (window.location.hash !== nextHash || window.location.pathname !== '/') {
-      window.history.pushState({ page: targetPage }, '', nextUrl);
+  if (updateHistory) {
+    // State-Based Routing murni: URL browser SELALU tetap bersih di root (/) tanpa tanda pagar (#)
+    if (window.location.hash || window.location.pathname !== '/' || window.history.state?.page !== targetPage) {
+      window.history.pushState({ page: targetPage }, '', '/');
     }
   }
 
@@ -1151,7 +1146,6 @@ function switchPage(targetPageId, { updateHash = true, scrollToTop = true, force
     if (!state.concertsLoaded || forceRefresh) {
       fetchConcerts({ force: forceRefresh, render: true });
     } else {
-      readSearchParamsFromUrl();
       applyFilters();
       updateCarouselPosition(false);
     }
@@ -1175,20 +1169,37 @@ window.navigateTo = switchPage;
 
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
-    const navTarget = e.target.closest('a[data-target], a[data-page]');
+    const navTarget = e.target.closest('a[data-target], a[data-page], .footer-domain-link, .footer-brand-row');
     if (!navTarget) return;
-    e.preventDefault();
-    const targetPage = navTarget.dataset.target || navTarget.dataset.page || navTarget.getAttribute('href') || 'page-beranda';
+    if (navTarget.tagName === 'A' || navTarget.getAttribute('href')) {
+      e.preventDefault();
+    }
+    const targetPage = navTarget.dataset.target || navTarget.dataset.page || 'beranda';
     switchPage(targetPage);
   });
 
-  window.addEventListener('hashchange', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const navTarget = e.target.closest?.('.footer-domain-link, .footer-brand-row');
+      if (navTarget) {
+        e.preventDefault();
+        const targetPage = navTarget.dataset.target || navTarget.dataset.page || 'beranda';
+        switchPage(targetPage);
+      }
+    }
   });
 
-  window.addEventListener('popstate', () => {
-    switchPage(resolvePageFromLocation(), { updateHash: false });
+  window.addEventListener('popstate', (e) => {
+    const targetPage = e.state?.page || resolvePageFromLocation();
+    switchPage(targetPage, { updateHistory: false });
   });
+
+  // Bersihkan hash URL lama secara otomatis jika ada
+  if (window.location.hash) {
+    try {
+      window.history.replaceState({ page: state.activePage }, '', '/');
+    } catch (_) {}
+  }
 }
 
 // ============================================================================
@@ -2196,7 +2207,7 @@ function renderMyOrders(orders) {
     container.innerHTML = `
       <div class="catalog-loading-state">
         <span>Belum ada tiket yang dipesan pada akun ini.</span>
-        <a href="#konser" class="btn-pill-primary" data-page="konser"><span>Cari Konser &amp; War Tiket</span></a>
+        <a href="/" class="btn-pill-primary" data-target="page-konser" data-page="konser"><span>Cari Konser &amp; War Tiket</span></a>
       </div>
     `;
     return;
@@ -2845,9 +2856,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const initialPage = resolvePageFromLocation();
   switchPage(initialPage, {
-    updateHash: Boolean(window.location.hash),
+    updateHistory: true,
     scrollToTop: false,
   });
+  if (window.location.hash || window.location.pathname !== '/') {
+    try {
+      window.history.replaceState({ page: initialPage }, '', '/');
+    } catch (_) {}
+  }
 
   requestAnimationFrame(() => {
     document.documentElement.classList.remove('wt-booting');
