@@ -89,15 +89,15 @@ async function initDatabaseSchema(attempt = 1) {
             console.log(`[Database] seed.sql executed successfully.`);
           }
         } else {
-          await client.query('CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))').catch(() => {});
-          await client.query("CREATE INDEX IF NOT EXISTS idx_seats_available_id ON seats (concert_id, id) WHERE status = 'Available'").catch(() => {});
+          await client.query('CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))').catch(() => { });
+          await client.query("CREATE INDEX IF NOT EXISTS idx_seats_available_id ON seats (concert_id, id) WHERE status = 'Available'").catch(() => { });
           await client.query(`
             INSERT INTO users (name, email, password, phone, id_card, role)
             VALUES
               ('Admin WarTiket', 'admin@wartiket.id', 'password123', '081100000001', '3171000000000001', 'admin'),
               ('User Penonton', 'user@wartiket.id', 'password123', '081100000002', '3171000000000002', 'user')
             ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role
-          `).catch(() => {});
+          `).catch(() => { });
           await client.query(`
             CREATE TABLE IF NOT EXISTS bookings (
               id SERIAL PRIMARY KEY,
@@ -119,11 +119,11 @@ async function initDatabaseSchema(attempt = 1) {
             );
             CREATE INDEX IF NOT EXISTS idx_bookings_user_created ON bookings(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_booking_details_booking ON booking_details(booking_id);
-          `).catch(() => {});
+          `).catch(() => { });
           console.log(`[Database] Database already initialized and verified.`);
         }
       } finally {
-        await client.query('SELECT pg_advisory_unlock(999999)').catch(() => {});
+        await client.query('SELECT pg_advisory_unlock(999999)').catch(() => { });
       }
     } finally {
       client.release();
