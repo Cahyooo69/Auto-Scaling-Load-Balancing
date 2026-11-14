@@ -12,6 +12,9 @@
     "status:containers": "docker stack ps wartiket",
     "test": "node test-quick.js",
     "test:unit": "node app/test.js",
+    "test:e2e": "node tests/e2e-tiketwar.spec.js",
+    "test:load": "node load-test/run-1000vu-node.js",
+    "test:lock": "node tests/verify-concurrency-and-lock.js",
     "test:dr": "dr-test.bat"
   },
   "keywords": [

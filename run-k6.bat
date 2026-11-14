@@ -17,11 +17,11 @@ echo.
 
 where k6 >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [INFO] Menjalankan k6 native...
-    k6 run load-test/load-test.js
+    echo [INFO] Menjalankan k6 native (load-test/k6-1000vu.js)...
+    k6 run load-test/k6-1000vu.js
 ) else (
-    echo [INFO] k6 native tidak ditemukan. Menjalankan k6 via Docker container...
-    type load-test\load-test.js | docker run --rm -i -e TARGET_URL=http://host.docker.internal grafana/k6 run -
+    echo [INFO] k6 native tidak ditemukan. Menjalankan runner stress test Node.js 1.000 VU...
+    node load-test/run-1000vu-node.js
 )
 
 echo.
