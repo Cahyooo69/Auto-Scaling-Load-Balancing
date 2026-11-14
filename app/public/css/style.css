@@ -1403,7 +1403,8 @@ html.wt-mobile .navbar {
   font-weight: 800;
 }
 
-.footer-domain-link {
+.footer-domain-link,
+.external-domain-link {
   color: #8CE071 !important;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -1414,7 +1415,8 @@ html.wt-mobile .navbar {
   transition: color 0.2s ease, text-decoration-color 0.2s ease, transform 0.2s ease;
 }
 
-.footer-domain-link:hover {
+.footer-domain-link:hover,
+.external-domain-link:hover {
   color: var(--color-white) !important;
   text-decoration-color: var(--color-white);
   transform: translateY(-1px);

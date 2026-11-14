@@ -1169,9 +1169,20 @@ window.navigateTo = switchPage;
 
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
-    // Biarkan link eksternal atau new-tab (target="_blank" / domain link) membuka tab baru secara native
-    if (e.target.closest('a[target="_blank"], .footer-domain-link')) {
-      return;
+    // Pengecualian Router SPA: biarkan tautan eksternal / new-tab ditangani bawaan oleh browser
+    const clickedAnchor = e.target.closest('a');
+    if (clickedAnchor) {
+      const href = (clickedAnchor.getAttribute('href') || '').trim();
+      const target = clickedAnchor.getAttribute('target');
+      if (
+        target === '_blank' ||
+        clickedAnchor.classList.contains('external-domain-link') ||
+        clickedAnchor.classList.contains('footer-domain-link') ||
+        href.startsWith('http://') ||
+        href.startsWith('https://')
+      ) {
+        return; // Jangan jalankan preventDefault, biarkan browser membuka secara native
+      }
     }
 
     const navTarget = e.target.closest('a[data-target], a[data-page], .footer-brand-row');
@@ -1185,7 +1196,20 @@ function initSpaNavigation() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-      if (e.target.closest?.('a[target="_blank"], .footer-domain-link')) return;
+      const clickedAnchor = e.target.closest?.('a');
+      if (clickedAnchor) {
+        const href = (clickedAnchor.getAttribute('href') || '').trim();
+        const target = clickedAnchor.getAttribute('target');
+        if (
+          target === '_blank' ||
+          clickedAnchor.classList.contains('external-domain-link') ||
+          clickedAnchor.classList.contains('footer-domain-link') ||
+          href.startsWith('http://') ||
+          href.startsWith('https://')
+        ) {
+          return;
+        }
+      }
       const navTarget = e.target.closest?.('.footer-brand-row');
       if (navTarget) {
         e.preventDefault();
