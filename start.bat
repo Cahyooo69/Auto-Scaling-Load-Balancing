@@ -85,9 +85,8 @@ echo =========================================================================
 echo              BERHASIL! SISTEM SIAP DIGUNAKAN DI BROWSER
 echo =========================================================================
 echo.
-echo Akses website Anda di:
-echo   - Localhost : http://localhost
-echo   - Domain    : https://wartiketkonser.id
+echo Akses website Anda di domain resmi:
+echo   https://wartiketkonser.id
 echo.
 echo Perintah praktis selanjutnya:
 echo   - Uji Load Balancing : node test-quick.js

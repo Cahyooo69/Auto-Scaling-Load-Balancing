@@ -1,6 +1,14 @@
 // SISTEM WAR TIKET KONSER MUSIK - Frontend UI Controller (Multi-Page Architecture)
 // Fixed 1440px Scaled Stage + Navbar Paten di Atas + Shared Overlays + E-Ticket Print.
 
+// Pengalihan otomatis ke domain resmi https://wartiketkonser.id jika dibuka via localhost
+if (typeof window !== 'undefined' && window.location) {
+  const currentHost = window.location.hostname;
+  if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    window.location.replace(`https://wartiketkonser.id${window.location.pathname}${window.location.search}${window.location.hash}`);
+  }
+}
+
 // ============================================================================
 // 1. ZOOM & STAGE SCALING (KUNCI TAMPILAN DI SEMUA ZOOM 25% - 500%)
 // ============================================================================

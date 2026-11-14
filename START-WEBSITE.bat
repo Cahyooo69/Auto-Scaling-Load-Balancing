@@ -28,9 +28,8 @@ echo =========================================================================
 echo       Website TiketWar Berhasil Dinyalakan di https://wartiketkonser.id
 echo =========================================================================
 echo.
-echo Website dapat langsung diakses di:
-echo   - Domain Resmi : https://wartiketkonser.id
-echo   - Localhost    : http://localhost
+echo Website dapat langsung diakses di domain resmi:
+echo   https://wartiketkonser.id
 echo.
 echo Tekan sembarang tombol untuk menutup jendela ini...
 pause >nul

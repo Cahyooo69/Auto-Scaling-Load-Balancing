@@ -237,7 +237,13 @@ async function runTests() {
     await cdp.eval(`document.getElementById('btnProceedToData').click()`);
     await cdp.waitFor(`() => document.getElementById('phaseDataDiri')?.style.display !== 'none'`, 6000);
     
-    await cdp.eval(`document.getElementById('btnBayarSekarang').click()`);
+    await cdp.eval(`(() => {
+      const nameInput = document.getElementById('buyerFullName');
+      const emailInput = document.getElementById('buyerEmailAddress');
+      if (nameInput && (!nameInput.value || nameInput.value.length < 2)) nameInput.value = 'User Penonton';
+      if (emailInput && (!emailInput.value || !emailInput.value.includes('@'))) emailInput.value = 'user@wartiket.id';
+      document.getElementById('btnBayarSekarang').click();
+    })()`);
     await cdp.waitFor(`() => document.getElementById('phaseETicket')?.style.display === 'block'`, 10000);
     
     const invoiceCode = await cdp.eval(`document.getElementById('ticketCode')?.textContent?.trim() || ''`);

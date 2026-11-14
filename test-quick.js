@@ -3,7 +3,7 @@
 const http = require('http');
 const https = require('https');
 
-const TARGET_URL = process.env.TARGET_URL || 'http://localhost/tickets/buy';
+const TARGET_URL = process.env.TARGET_URL || 'https://wartiketkonser.id/api/tickets/buy';
 const client = TARGET_URL.startsWith('https') ? https : http;
 
 async function sendBuyRequest(id) {
