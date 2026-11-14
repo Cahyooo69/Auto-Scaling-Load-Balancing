@@ -15,10 +15,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const BASE_URL = (process.env.TARGET_URL || 'https://wartiketkonser.id').replace(/\/+$/, '');
 const TOTAL_VUS = Number(process.env.VUS || 1000);
-const CONCURRENCY = Number(process.env.CONCURRENCY || 50);
 const CONCERT_ID = 1;
-// Kursi hot spot baris A s.d. E (sesuai seed database) untuk simulasi Race Condition
-const HOT_SEATS = ['A-01', 'A-02', 'B-01', 'B-02', 'C-01', 'C-02', 'D-01', 'E-05'];
+const HOT_SEATS = ['A-01', 'B-02', 'C-03', 'D-04', 'E-05', 'F-06', 'G-07', 'H-08'];
 
 async function postJson(path, payload) {
   const start = Date.now();
@@ -52,31 +50,19 @@ async function run1000VuStressTest() {
   const resetRes = await postJson('/api/tickets/reset', {});
   console.log(`      Status Reset: HTTP ${resetRes.status}\n`);
 
-  console.log(`[2/3] Meluncurkan ${TOTAL_VUS} request (concurrency: ${CONCURRENCY} VU worker pool)...`);
+  console.log(`[2/3] Meluncurkan ${TOTAL_VUS} request simultan ke cluster load balancer...`);
   const startTime = Date.now();
 
-  const items = Array.from({ length: TOTAL_VUS }, (_, idx) => ({
-    id: idx + 1,
-    seat: HOT_SEATS[idx % HOT_SEATS.length],
-  }));
-
-  const results = new Array(TOTAL_VUS);
-  let nextIdx = 0;
-
-  const workers = Array.from({ length: CONCURRENCY }, async () => {
-    while (nextIdx < items.length) {
-      const current = nextIdx++;
-      const item = items[current];
-      const res = await postJson('/api/tickets/buy', {
-        userId: item.id,
-        concertId: CONCERT_ID,
-        seatNumber: item.seat,
-      });
-      results[current] = { id: item.id, seat: item.seat, ...res };
-    }
+  const requests = Array.from({ length: TOTAL_VUS }, (_, idx) => {
+    const seat = HOT_SEATS[idx % HOT_SEATS.length];
+    return postJson('/api/tickets/buy', {
+      userId: idx + 1,
+      concertId: CONCERT_ID,
+      seatNumber: seat,
+    }).then((res) => ({ id: idx + 1, seat, ...res }));
   });
 
-  await Promise.all(workers);
+  const results = await Promise.all(requests);
   const totalDuration = Date.now() - startTime;
 
   console.log('\n[3/3] Menganalisis Metrik Hasil Uji Beban & SLA...');
@@ -143,3 +129,4 @@ async function run1000VuStressTest() {
 }
 
 run1000VuStressTest().catch(console.error);
+

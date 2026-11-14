@@ -61,8 +61,8 @@ export function setup() {
 export default function () {
   totalCheckouts.add(1);
 
-  // Kursi hot spot baris A s.d. E (sesuai seed database) untuk simulasi Race Condition
-  const hotSeats = ['A-01', 'A-02', 'B-01', 'B-02', 'C-01', 'C-02', 'D-01', 'E-05'];
+  // Daftar kursi hot spot untuk mensimulasikan bentrokan perebutan kursi (Race Condition)
+  const hotSeats = ['A-01', 'B-02', 'C-03', 'D-04', 'E-05', 'F-06', 'G-07', 'H-08'];
   const targetSeat = hotSeats[Math.floor(Math.random() * hotSeats.length)];
   const userId = (__VU * 1000) + __ITER;
 
@@ -115,3 +115,4 @@ export function teardown(data) {
   const finalHealth = http.get(`${BASE_URL}/api/system/info`, { timeout: '5s' });
   console.log(`[Status Akhir Nginx & Database]: HTTP ${finalHealth.status}`);
 }
+
