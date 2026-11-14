@@ -1169,7 +1169,12 @@ window.navigateTo = switchPage;
 
 function initSpaNavigation() {
   document.addEventListener('click', (e) => {
-    const navTarget = e.target.closest('a[data-target], a[data-page], .footer-domain-link, .footer-brand-row');
+    // Biarkan link eksternal atau new-tab (target="_blank" / domain link) membuka tab baru secara native
+    if (e.target.closest('a[target="_blank"], .footer-domain-link')) {
+      return;
+    }
+
+    const navTarget = e.target.closest('a[data-target], a[data-page], .footer-brand-row');
     if (!navTarget) return;
     if (navTarget.tagName === 'A' || navTarget.getAttribute('href')) {
       e.preventDefault();
@@ -1180,7 +1185,8 @@ function initSpaNavigation() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-      const navTarget = e.target.closest?.('.footer-domain-link, .footer-brand-row');
+      if (e.target.closest?.('a[target="_blank"], .footer-domain-link')) return;
+      const navTarget = e.target.closest?.('.footer-brand-row');
       if (navTarget) {
         e.preventDefault();
         const targetPage = navTarget.dataset.target || navTarget.dataset.page || 'beranda';
