@@ -66,7 +66,7 @@ function fit() {
     document.documentElement.style.setProperty('--boot-zoom', String(s));
     document.documentElement.style.setProperty('--vp-h', `${Math.ceil(ch / s)}px`);
 
-    if (modalRoot) modalRoot.style.transform = `scale(${s})`;
+    if (modalRoot) modalRoot.style.transform = '';
     if (spaMain) spaMain.style.paddingTop = '';
 
     if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1')) {
@@ -1327,16 +1327,23 @@ function requireAuthAndOpenWar(concertIds) {
 // 9. LOGIN MODAL & HANDLER
 // ============================================================================
 
+function syncModalBodyLock() {
+  if (!document.body) return;
+  document.body.classList.toggle('modal-open', Boolean(document.querySelector('.modal-overlay.active')));
+}
+
 function openLoginModal() {
   closeAllAutocompletes();
   closeNavAccountDropdown();
   const modal = document.getElementById('loginModal');
   if (modal) modal.classList.add('active');
+  syncModalBodyLock();
 }
 
 function closeLoginModal() {
   document.getElementById('loginModal')?.classList.remove('active');
   document.getElementById('loginGuardNotice')?.classList.remove('active');
+  syncModalBodyLock();
 }
 
 function autoFill(email, pass) {
@@ -1704,6 +1711,7 @@ async function openWarModal(concertIdsOrId) {
   state.isCheckingOut = false;
   clearWarFeedback();
   document.getElementById('warModal')?.classList.add('active');
+  syncModalBodyLock();
   await joinAndEnterWarQueue(ids[0]);
 }
 
@@ -1777,6 +1785,7 @@ function closeWarModal() {
   if (grid) grid.innerHTML = '';
   clearWarFeedback();
   document.getElementById('warModal')?.classList.remove('active');
+  syncModalBodyLock();
 }
 
 async function loadSeats(concertId) {
