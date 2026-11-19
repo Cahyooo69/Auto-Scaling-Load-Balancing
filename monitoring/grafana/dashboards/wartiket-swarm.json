@@ -43,14 +43,14 @@
       }
     },
     {
-      "title": "Network RX Bytes/sec per Container",
+      "title": "Network RX Throughput (Bytes/sec)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_network_receive_bytes_total{id=~\"/docker/.*\"}[30s])",
-          "legendFormat": "Container {{name}}"
+          "expr": "rate(container_network_receive_bytes_total{interface=~\"eth0|services1\"}[30s])",
+          "legendFormat": "Interface {{interface}}"
         }
       ],
       "fieldConfig": {
@@ -61,14 +61,14 @@
       }
     },
     {
-      "title": "Network TX Bytes/sec per Container",
+      "title": "Network TX Throughput (Bytes/sec)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_network_transmit_bytes_total{id=~\"/docker/.*\"}[30s])",
-          "legendFormat": "Container {{name}}"
+          "expr": "rate(container_network_transmit_bytes_total{interface=~\"eth0|services1\"}[30s])",
+          "legendFormat": "Interface {{interface}}"
         }
       ],
       "fieldConfig": {
