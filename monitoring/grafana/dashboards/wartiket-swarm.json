@@ -13,8 +13,8 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{container_label_com_docker_swarm_service_name=~\"wartiket_.*\"}[30s]) * 100",
-          "legendFormat": "{{container_label_com_docker_swarm_task_name}}"
+          "expr": "rate(container_cpu_usage_seconds_total{image=~\"(docker.io/library/)?wartiket.*|redis.*\"}[30s]) * 100",
+          "legendFormat": "{{image}} ({{name}})"
         }
       ],
       "fieldConfig": {
@@ -31,8 +31,8 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{container_label_com_docker_swarm_service_name=~\"wartiket_.*\"} / 1024 / 1024",
-          "legendFormat": "{{container_label_com_docker_swarm_task_name}}"
+          "expr": "container_memory_usage_bytes{image=~\"(docker.io/library/)?wartiket.*|redis.*\"} / 1024 / 1024",
+          "legendFormat": "{{image}} ({{name}})"
         }
       ],
       "fieldConfig": {
@@ -49,8 +49,8 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_network_receive_bytes_total{container_label_com_docker_swarm_service_name=~\"wartiket_.*\"}[30s])",
-          "legendFormat": "{{container_label_com_docker_swarm_task_name}}"
+          "expr": "rate(container_network_receive_bytes_total{id=~\"/docker/.*\"}[30s])",
+          "legendFormat": "Container {{name}}"
         }
       ],
       "fieldConfig": {
@@ -67,8 +67,8 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_network_transmit_bytes_total{container_label_com_docker_swarm_service_name=~\"wartiket_.*\"}[30s])",
-          "legendFormat": "{{container_label_com_docker_swarm_task_name}}"
+          "expr": "rate(container_network_transmit_bytes_total{id=~\"/docker/.*\"}[30s])",
+          "legendFormat": "Container {{name}}"
         }
       ],
       "fieldConfig": {
@@ -85,7 +85,7 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "count(container_last_seen{container_label_com_docker_swarm_service_name=\"wartiket_app\"})",
+          "expr": "count(count by (name) (container_cpu_usage_seconds_total{image=~\"(docker.io/library/)?wartiket-app.*\"}))",
           "legendFormat": "App Workers"
         }
       ]
