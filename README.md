@@ -288,7 +288,7 @@ curl -I http://localhost/health
 
 ```text
 ├── app/                                 # Sumber Kode Backend & Frontend
-│   ├── public/                          # Antarmuka Web Pembeli & Admin
+│   ├── public/                          # Antarmuka Web Pembeli & Admin (SPA)
 │   │   ├── css/style.css                # Tampilan UI Modern Responsif (Flexbox/Grid)
 │   │   ├── js/app.js                    # SPA Controller, War Engine & Anti-Stuck Logic
 │   │   ├── img/                         # Asset visual katalog konser
@@ -305,26 +305,37 @@ curl -I http://localhost/health
 │   └── test.js                          # Unit test verifikasi logika internal
 ├── nginx/                               # Konfigurasi Reverse Proxy & Ingress
 │   ├── Dockerfile                       # Image Nginx Alpine kustom
-│   └── nginx.conf                       # Konfigurasi buffering, timeout & keepalive
+│   └── nginx.conf                       # Konfigurasi buffering, timeout & keepalive 128
+├── monitoring/                          # Stack Monitoring Pertemuan 5
+│   ├── prometheus.yml                   # Scrape target cAdvisor & Node Exporter
+│   └── grafana/                         # Datasource & Dashboard Swarm auto-provisioning
 ├── docs/                                # Laporan Akademik & Materi Presentasi
-│   ├── PRESENTASI.md                    # Panduan presentasi 7 menit, naskah & Q&A
+│   ├── PRESENTASI.md                    # Panduan presentasi & demo lengkap Pertemuan 1-5
 │   ├── Laporan_Progres_Pertemuan_1_*.pdf # Laporan Pertemuan 1
-│   ├── Laporan_Progres_Gabungan_*.pdf   # Laporan Pertemuan 2
+│   ├── Laporan_Progres_Gabungan_*.pdf   # Laporan Pertemuan 2 & 3
 │   ├── Laporan_Hasil_Testing_*.xlsx     # Data log audit performa
 │   └── diagram_*.png                    # Diagram topologi jaringan dan arsitektur
-├── load-test/                           # Skrip Pengujian Beban
+├── load-test/                           # Skrip Pengujian Beban k6
+│   ├── load-test-demo.js                # Uji beban bertahap 45 detik (10-1000 VU)
+│   ├── load-test-failover.js            # Skenario failover konstan 1.000 VU (90 detik)
+│   ├── load-test-1000-users.js          # Skenario flash crowd instant 1.000 VU
 │   └── load-test.js                     # Skenario k6 10-1000 VU 3 menit SLA check
 ├── tests/                               # Rangkaian Verifikasi Otomatis
 │   ├── e2e-war-tiket.mjs                # Browser Automation E2E (Chrome/Edge CDP)
 │   └── verify-concurrency-and-lock.js   # Uji race condition & validasi atomik lock
 ├── docker-compose.yml                   # Spesifikasi Docker Swarm & Resource Limits
+├── docker-compose.monitoring.yml        # Stack monitoring (Prometheus + Grafana + cAdvisor)
+├── demo-pertemuan-3.ps1                 # Runner PowerShell interaktif Pertemuan 3
+├── demo-pertemuan-4.ps1                 # Runner PowerShell interaktif Pertemuan 4
+├── demo-pertemuan-5.ps1                 # Runner PowerShell interaktif Pertemuan 5
+├── test-failover-demo.js                # Pengujian failover otomatis Redis 5 langkah
+├── test-quick.js                        # Pengujian verifikasi load balancing 20 request
 ├── start.bat                            # Skrip startup klaster 1-klik
 ├── stop.bat                             # Skrip shutdown klaster 1-klik
 ├── status.bat                           # Skrip pengecekan kesehatan klaster
 ├── scale.bat                            # Skrip dynamic auto-scaling worker
 ├── dr-test.bat                          # Skrip pengujian disaster recovery pertemuan 4
 ├── run-k6.bat                           # Skrip pengujian beban k6 otomatis
-├── test-quick.js                        # Pengujian verifikasi load balancing 20 request
 └── README.md                            # Dokumentasi resmi proyek
 ```
 
@@ -334,15 +345,15 @@ curl -I http://localhost/health
 
 Sesuai ketentuan, alokasi waktu presentasi adalah **7 Menit Pemaparan & Live Demo** serta **4 Menit Sesi Evaluasi & Tanya Jawab**.
 
-Dokumentasi lengkap naskah kata-demi-kata dan simulasi jawaban dosen tersedia di file:  
-👉 **[docs/PRESENTASI.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docs/PRESENTASI.md)**
+Dokumentasi lengkap naskah kata-demi-kata, panduan pengujian tiap pertemuan, dan simulasi jawaban dosen tersedia di file:  
+👉 **[docs/PRESENTASI.md](docs/PRESENTASI.md)**
 
 ### Ringkasan Urutan Live Demo 7 Menit:
 1. **Menit 00:00 - 01:30 (Masalah & Arsitektur):** Jelaskan bahaya *flash crowd* war tiket dan perlihatkan diagram Mermaid.
 2. **Menit 01:30 - 03:00 (Resource Limits):** Tunjukkan `docker stack services wartiket` untuk membuktikan CPU 0.25 dan RAM 256M.
 3. **Menit 03:00 - 04:30 (Demo Load Balancing):** Jalankan `node test-quick.js`. Tunjukkan kolom `ServedBy` yang terbagi rata antar ID container.
 4. **Menit 04:30 - 05:30 (Dynamic Auto-Scaling):** Jalankan `docker service scale wartiket_app=8`. Buktikan 8 container langsung aktif dalam 2 detik.
-5. **Menit 05:30 - 06:30 (Disaster Recovery):** Jalankan `.\dr-test.bat`. Matikan 2 worker paksa dan buktikan sistem tetap melayani transaksi tanpa ada *request drop*.
+5. **Menit 05:30 - 06:30 (Disaster Recovery):** Jalankan `.\demo-pertemuan-4.ps1` atau `.\dr-test.bat`. Matikan worker paksa dan buktikan sistem tetap melayani transaksi tanpa ada *request drop*.
 6. **Menit 06:30 - 07:00 (Penutup):** Paparkan ketercapaian SLA (Response Time $< 200\text{ms}$ dan $0\%$ *overselling*).
 
 ---
@@ -351,8 +362,8 @@ Dokumentasi lengkap naskah kata-demi-kata dan simulasi jawaban dosen tersedia di
 
 | Pertemuan | Agenda & Luaran Wajib | Status Implementasi | Bukti Artefak |
 |---|---|---|---|
-| **Pertemuan 1** | **Planning & Architecture Design:** Diagram arsitektur sistem, skema jaringan Docker, spesifikasi `docker-compose.yml`, dan repositori Git kelompok. | **SELESAI (100%)** | Diagram Mermaid di [README.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/README.md), [docker-compose.yml](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docker-compose.yml), file PDF di `docs/`. |
-| **Pertemuan 2** | **Environment Setup & Core Deployment:** Seluruh container berjalan (*up & running*) dalam jaringan internal Docker dengan *resource limit* diterapkan. | **SELESAI (100%)** | Layanan `wartiket_nginx`, `wartiket_app`, `wartiket_redis`, `wartiket_db` terdeploy dengan CPU 0.25 & RAM 256M. |
-| **Pertemuan 3** | **Scalability & Load Testing (1-1000 Clients):** Eksekusi pengujian beban bertahap (10 s.d. 1000 VU). Grafik perbandingan throughput dan waktu tanggap saat diskalakan. | **SELESAI (100%)** | Skrip [load-test/load-test.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/load-test/load-test.js), skrip [scale.bat](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/scale.bat), dan [test-quick.js](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/test-quick.js). |
-| **Pertemuan 4** | **Disaster Recovery (DR) & Failover Execution:** Live demo mematikan container utama secara paksa saat pengujian berlangsung. Pembuktian failover dan pengukuran RTO. | **SELESAI (100%)** | Skrip otomasi [dr-test.bat](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/dr-test.bat), konfigurasi Nginx retry `proxy_next_upstream`, dan Swarm auto-restart. |
-| **Pertemuan 5** | **Monitoring & Final Demo:** Integrasi dashboard pemantauan, laporan akhir, serta demo sistem utuh. | **SELESAI (100%)** | Web Portal Admin terintegrasi pada route `#admin`, file laporan akademik lengkap di `docs/`, dan panduan presentasi [docs/PRESENTASI.md](file:///d:/Kuliah/Kuliah/SEMESTER%207/Cloud%20Computing/revisi/docs/PRESENTASI.md). |
+| **Pertemuan 1** | **Planning & Architecture Design:** Diagram arsitektur sistem, skema jaringan Docker, spesifikasi `docker-compose.yml`, dan repositori Git kelompok. | **SELESAI (100%)** | Diagram Mermaid di [README.md](README.md), [docker-compose.yml](docker-compose.yml), file PDF di `docs/`. |
+| **Pertemuan 2** | **Environment Setup & Core Deployment:** Seluruh container berjalan (*up & running*) dalam jaringan internal Docker dengan *resource limit* diterapkan. | **SELESAI (100%)** | Layanan `wartiket_nginx`, `wartiket_app`, `wartiket_redis` terdeploy dengan CPU 0.25 & RAM 256M. |
+| **Pertemuan 3** | **Scalability & Load Testing (1-1000 Clients):** Eksekusi pengujian beban bertahap (10 s.d. 1000 VU). Grafik perbandingan throughput dan waktu tanggap saat diskalakan. | **SELESAI (100%)** | Skrip [load-test/load-test.js](load-test/load-test.js), [demo-pertemuan-3.ps1](demo-pertemuan-3.ps1), dan [test-quick.js](test-quick.js). |
+| **Pertemuan 4** | **Disaster Recovery (DR) & Failover Execution:** Live demo mematikan container utama secara paksa saat pengujian berlangsung. Pembuktian failover dan pengukuran RTO. | **SELESAI (100%)** | Skrip otomasi [demo-pertemuan-4.ps1](demo-pertemuan-4.ps1), [test-failover-demo.js](test-failover-demo.js), konfigurasi Nginx retry `proxy_next_upstream`, dan Swarm auto-restart. |
+| **Pertemuan 5** | **Monitoring & Final Demo:** Integrasi dashboard pemantauan, laporan akhir, serta demo sistem utuh. | **SELESAI (100%)** | Stack [docker-compose.monitoring.yml](docker-compose.monitoring.yml), dashboard Grafana [monitoring/](monitoring/), file laporan di `docs/`, dan panduan presentasi [docs/PRESENTASI.md](docs/PRESENTASI.md). |
