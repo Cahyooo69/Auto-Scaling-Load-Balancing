@@ -16,9 +16,11 @@ cd "d:\Kuliah\Kuliah\SEMESTER 7\Cloud Computing\Auto-Scaling & Load Balancing"
 # 3. Inisialisasi Swarm (sekali saja, lewati jika sudah)
 docker swarm init
 
-# 4. Build image backend & nginx
+# 4. Build image backend, nginx, waf & honeypot
 docker build -t wartiket-app:latest ./app
 docker build -t wartiket-nginx:latest ./nginx
+docker build -t wartiket-waf:latest -f waf/Dockerfile .
+docker build -t wartiket-honeypot:latest ./honeypot
 
 # 5. Deploy stack utama
 docker stack deploy -c docker-compose.yml wartiket
@@ -53,11 +55,15 @@ Buka repositori GitHub atau file diagram di browser:
 ```
 https://github.com/Cahyooo69/Auto-Scaling-Load-Balancing
 ```
-> "**Layer 1 — Nginx Ingress Reverse Proxy:** Menerima seluruh trafik di Port 80. Nginx bertindak sebagai tameng karena ditulis dalam C dengan arsitektur *event-driven (epoll)*, mampu menampung puluhan ribu koneksi konkuren dengan konsumsi RAM sangat kecil.
+> "**Layer 1 — Perimeter Security (WAF + Honeypot):** Hanya Port 80 dan 443 yang terbuka di `wartiket_waf` ('Pak Satpam'). WAF memblokir SQLi, XSS, LFI, scanner bot, dan rate-limit; sementara probe ke `/wp-admin`, `/.env`, atau `/phpmyadmin` dialihkan ke **Honeypot** untuk direkam log & metrik Prometheus-nya.
 >
-> **Layer 2 — Node.js Microservice Workers:** Backend stateless yang memproses transaksi checkout. Dirancang elastis, dapat diskalakan dari 2 hingga 8 container secara dinamis tanpa downtime.
+> **Layer 2 — Internal Load Balancer, CDN Edge Cache & MinIO (Object Storage):** Nginx internal (2 replika HA) membagi beban ke worker sekaligus bertindak sebagai **CDN Edge Pull-Through Cache** (`cdn.wartiketkonser.id` & `/cdn/*`) dari **MinIO (S3)** untuk aset gambar, CSS, dan JS agar tidak membebani disk & App server.
 >
-> **Layer 3 — Redis In-Memory Datastore:** Menyimpan kuota stok tiket di RAM. Menggunakan Lua Scripting atomik sehingga operasi cek stok dan pengurangan stok tereksekusi dalam satu siklus CPU Redis — menjamin *0% overselling* secara matematis."
+> **Layer 3 — Stateless Node.js Workers (2 → 8 Replika):** Backend stateless dengan **2-Step Checkout (Hold 5 Menit `PENDING` → `PAID` / Auto-`EXPIRED`)** sehingga tidak terjadi *open donation* maupun lock menggantung.
+>
+> **Layer 4 — Redis In-Memory (Khusus Non-Finansial):** Hanya untuk **Stateless Login Session** (user tidak logout saat 1 worker mati), **Waiting Queue**, **Hot Cache**, dan **Seat Lock sementara** — bukan penyimpanan transaksi keuangan permanen.
+>
+> **Layer 5 — Sharded Database HA (PgBouncer + 3 Master & 3 Slave):** Memecah data secara horizontal berdasarkan `concert_id % 3` (Shard 1 = Konser 1, Shard 2 = Konser 2, Shard 3 = Konser 3), masing-masing memiliki **1 Master (`app_writer`) + 1 Slave (`app_reader` *SELECT-only*)** di belakang **PgBouncer** (`1.000 client → 30 pool/shard`, total limit RAM 6 DB = 1,92 GB — aman di laptop 16 GB), lengkap dengan matriks keamanan di `docs/SECURITY_ACCESS_MATRIX.md`."
 
 #### Cara Menunjukkan Skema Jaringan Docker
 ```powershell
@@ -340,8 +346,11 @@ docker rm -f $(docker ps -q -f name=wartiket_app | Select-Object -First 3)
 ### Q5: *"Berapa Recovery Time Objective (RTO) saat container worker mati mendadak?"*
 > "RTO sistem kami adalah **kurang dari 5 detik**. Nginx `proxy_next_upstream` mengalihkan transaksi aktif ke worker sehat secara instan (0 detik downtime bagi pengguna), sementara Docker Swarm mendeteksi task mati dan men-deploy container pengganti baru dalam rentang waktu 2 hingga 5 detik."
 
-### Q6: *"Bagaimana persistensi data stok tiket dijamin jika container Redis dimatikan?"*
-> "Redis dijalankan dengan flag `--appendonly yes` (AOF - Append Only File) yang dipetakan ke Docker Named Volume `redis-data:/data`. Setiap perubahan stok dicatat ke disk persisten host secara real-time, sehingga saat container Redis mati dan di-recreate, stok terakhir tidak pernah hilang."
+### Q6: *"Bagaimana persistensi data transaksi dijamin? Bukankah Redis di RAM bisa hilang saat mati?"*
+> "Betul Pak — sesuai prinsip arsitektur, **kami TIDAK menyimpan data transaksi keuangan di Redis**. Seluruh transaksi resmi (`bookings`, `booking_details`, `transactions`, `seats`) ditulis secara ACID ke **PostgreSQL 16 Primary** (via **PgBouncer**) dan direplikasi secara *streaming WAL* ke **PostgreSQL Read Replica**. Redis hanya bertugas untuk data non-finansial/ephemeral: **Stateless Login Session**, **Waiting Queue**, **Hot Cache**, dan **temporary seat lock 5 menit**."
+
+### Q7: *"Mengapa tidak semua worker langsung konek ke 1 database? Dan bagaimana keamanan aksesnya?"*
+> "Satu PostgreSQL normalnya hanya kuat ~250 koneksi serentak. Oleh karena itu kami memasang **PgBouncer** (*transaction pooling*: 1.000 koneksi worker → 40 pool ke Primary) dan memisahkan query `READ` ke **Read Replica**. Untuk keamanan, kami menerapkan **Defense-in-Depth** dan **Least Privilege**: **WAF + Honeypot** di perimeter (publik hanya Port 80/443), role DB terpisah (`app_writer`, `app_reader` *SELECT-only*, `replicator`), RBAC admin untuk reset kuota, serta dokumentasi inventaris server & hak akses di `docs/SECURITY_ACCESS_MATRIX.md`. Semua dapat dibuktikan langsung dengan `node tests/verify-revised-architecture.js`."
 
 ---
 

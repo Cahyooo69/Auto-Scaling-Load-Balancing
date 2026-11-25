@@ -52,7 +52,7 @@ VALUES
         1500000, 
         500, 
         495, 
-        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80'
+        '/cdn/img/poster-coldplay.svg'
     ),
     (
         2, 
@@ -63,7 +63,7 @@ VALUES
         750000, 
         500, 
         497, 
-        'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80'
+        '/cdn/img/poster-sheila.svg'
     ),
     (
         3, 
@@ -74,7 +74,7 @@ VALUES
         2250000, 
         500, 
         496, 
-        'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80'
+        '/cdn/img/poster-taylor.svg'
     )
 ON CONFLICT (id) DO UPDATE SET 
     title = EXCLUDED.title,
@@ -82,7 +82,8 @@ ON CONFLICT (id) DO UPDATE SET
     venue = EXCLUDED.venue,
     concert_date = EXCLUDED.concert_date,
     price = EXCLUDED.price,
-    total_seats = EXCLUDED.total_seats;
+    total_seats = EXCLUDED.total_seats,
+    image_url = EXCLUDED.image_url;
 
 SELECT setval('concerts_id_seq', (SELECT MAX(id) FROM concerts));
 

@@ -1,8 +1,9 @@
 FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY ssl/ /etc/nginx/ssl/
+RUN mkdir -p /var/cache/nginx/cdn && chown -R nginx:nginx /var/cache/nginx
 
-EXPOSE 80 443
+COPY nginx.conf /etc/nginx/nginx.conf
+
+EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

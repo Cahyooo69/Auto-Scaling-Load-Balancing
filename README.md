@@ -37,13 +37,13 @@ Pada sistem monolitik tradisional tanpa orkestrasi cloud, skenario ini hampir se
 2. **Race Condition & Overselling (Kelebihan Penjualan)**: Permintaan yang masuk bersamaan membaca kuota stok tiket yang sama sebelum transaksi sebelumnya sempat menulis pembaruan data ke database. Akibatnya, tiket terjual melebihi kapasitas tempat duduk riil.
 3. **Single Point of Failure (SPOF)**: Jika gerbang masuk (*ingress*) atau *worker backend* mengalami *down*, seluruh proses transaksi langsung lumpuh total.
 
-### Solusi Arsitektur Cloud-Native
-Proyek ini mengimplementasikan klaster **Docker Swarm** yang menggabungkan:
-- **Nginx Ingress Load Balancer (Port 80)** dengan konfigurasi *High Availability* (2 replika) dan *keepalive connection pooling*.
-- **Node.js Mock API Replicas** yang dapat diskalakan secara elastis (*dynamic horizontal scaling*) mulai dari **2 hingga 8 replika container** di balik Docker Swarm *Routing Mesh* (Layer 4 IPVS).
-- **Redis In-Memory Atomic Locking** berbasis *Lua Scripting* untuk memproses *check-and-decrement* kuota stok tiket dalam satu instruksi atomik (0% *overselling*).
-- **PostgreSQL 16 Database** untuk persistensi transaksi ACID, katalog konser, dan audit pengguna.
-- **Resource Constraints**: Setiap container dibatasi secara ketat pada `cpus: '0.25'` dan `memory: 256M` sesuai spesifikasi praktikum.
+### Solusi Arsitektur Cloud-Native (*Defense-in-Depth* — Revisi Dosen)
+Proyek ini mengimplementasikan klaster **Docker Swarm 5-Layer** yang menyelesaikan seluruh titik tumbang (*single points of failure & bottleneck*):
+- **Layer 1 — Perimeter Security (WAF + Honeypot):** Hanya port **80 & 443** yang dibuka ke publik pada `wartiket_waf` (memblokir SQLi, XSS, LFI, scanner bot, & rate-limit). Probe penyerang (`/wp-admin`, `/phpmyadmin`, `/.env`) dialihkan ke **Honeypot** (`wartiket_honeypot`) untuk dicatat ke Prometheus/Grafana.
+- **Layer 2 — Internal Load Balancer, CDN Edge Cache & Object Storage (MinIO):** Nginx internal (2 replika HA) bertindak sebagai Load Balancer sekaligus **CDN Edge Pull-Through Cache** (`cdn.wartiketkonser.id` & `/cdn/*`) yang mengambil file statis (gambar, CSS, JS) dari **MinIO (S3)** agar tidak membebani Disk I/O maupun App Worker.
+- **Layer 3 — Stateless Node.js Workers (2 → 8 Replika):** Backend stateless dengan **2-Step Checkout (Hold 5 Menit `PENDING` → `PAID` / Auto-`EXPIRED`)** serta proteksi RBAC/IDOR.
+- **Layer 4 — Redis In-Memory (Khusus Non-Finansial):** Hanya menyimpan **Stateless Login Session**, **Waiting Queue**, **Hot Cache**, dan **Temporary Seat Lock** — bukan tempat menyimpan data transaksi keuangan permanen.
+- **Layer 5 — Database HA (PgBouncer + PostgreSQL Primary/Read-Replica + Least Privilege):** Koneksi tulis dari 2–8 worker dimultipleks via **PgBouncer** (`transaction pooling`, max 1.000 client → 40 pool) ke **PostgreSQL Primary** (role `app_writer`), sedangkan query baca katalog/kursi/riwayat diarahkan ke **PostgreSQL Read Replica** (role `app_reader` *SELECT-only* dengan streaming replication role `replicator`). Detail matriks keamanan & rancangan sharding tersedia di **[docs/SECURITY_ACCESS_MATRIX.md](docs/SECURITY_ACCESS_MATRIX.md)**.
 
 ---
 
@@ -74,64 +74,83 @@ Agar mudah dipahami oleh siapa pun (bahkan pemula), bayangkan sistem ini bekerja
 
 ---
 
-### Diagram Alur Sederhana
+### Diagram Alur Arsitektur 5-Layer (Revisi Defense-in-Depth)
+
+![Arsitektur 5-Layer Defense-in-Depth Sistem War Tiket](docs/diagram_arsitektur_sistem.png)
 
 ```mermaid
-flowchart TD
-    subgraph Klien["1. Pengunjung / Calon Pembeli"]
-        VU["👤 10 - 1.000 Pengguna Simultan (Traffic War Tiket)"]
+flowchart LR
+    U["Client / k6"] -->|"HTTP 80/443"| WAF
+    ATK["Attacker"] -.->|"Probe / Exploit"| WAF
+
+    subgraph L1["Layer 1: Perimeter (ONLY 80/443)"]
+        WAF["WAF Nginx (2x HA)"]
+        BLK["HTTP 403 Blocked"]
+        HP["Honeypot (:8081)"]
+        WAF -.->|"SQLi/XSS/LFI/Bot"| BLK
+        WAF -.->|"Decoy /wp-admin, /.env"| HP
     end
 
-    subgraph Gerbang["2. Pintu Masuk & Load Balancer"]
-        NGINX["🛡️ Nginx Reverse Proxy (Port 80)<br/>Membagi Antrean Tamu Agar Rata"]
+    subgraph L2["Layer 2: LB & CDN"]
+        NGINX["Nginx LB + CDN (2x HA)"]
+        MINIO[("MinIO S3 (Assets)")]
+        NGINX -->|"Cache Miss :9000"| MINIO
     end
 
-    subgraph KlasterSwarm["3. Klaster Kasir / Worker (Docker Swarm)"]
-        VIP{"🌐 Swarm Routing Mesh (IPVS)"}
-        W1["⚡ Worker API 1 (Aktif)"]
-        W2["⚡ Worker API 2 (Aktif)"]
-        W3["⚡ Worker API 3..8 (Auto-Scale Saat Ramai)"]
+    subgraph L34["Layer 3 & 4: App + Cache"]
+        APP["Node.js Workers (2..8x)"]
+        REDIS[("Redis (Session/Queue/Lock)")]
+        APP -->|"Session/Cache :6379"| REDIS
     end
 
-    subgraph Data["4. Papan Kuota & Database"]
-        REDIS[("⚡ Redis In-Memory (Lua Script)<br/>Kunci Stok Kilat: 0% Tiket Dobel")]
-        DB[("💾 PostgreSQL 16<br/>Simpan Data Transaksi Resmi")]
+    subgraph L5["Layer 5: Sharded Database HA (3 Master + 3 Slave)"]
+        PGB["PgBouncer (:5432 Pool & Write Router)"]
+        M1[("Master 1 (Shard 1)")]
+        S1[("Slave 1 (Replica 1)")]
+        M2[("Master 2 (Shard 2)")]
+        S2[("Slave 2 (Replica 2)")]
+        M3[("Master 3 (Shard 3)")]
+        S3[("Slave 3 (Replica 3)")]
+        PGB --> M1 & M2 & M3
+        M1 -.->|"WAL"| S1
+        M2 -.->|"WAL"| S2
+        M3 -.->|"WAL"| S3
     end
 
-    VU -->|"1. Kirim Permintaan Beli"| NGINX
-    NGINX -->|"2. Teruskan Antrean"| VIP
-    VIP -->|"Bagi Beban Rata"| W1
-    VIP -->|"Bagi Beban Rata"| W2
-    VIP -.->|"Bagi Beban Tambahan"| W3
-
-    W1 -->|"3. Amankan Kuota Kilat"| REDIS
-    W2 -->|"3. Amankan Kuota Kilat"| REDIS
-    W3 -->|"3. Amankan Kuota Kilat"| REDIS
-
-    W1 -.->|"4. Catat Transaksi Sah"| DB
-    W2 -.->|"4. Catat Transaksi Sah"| DB
-    W3 -.->|"4. Catat Transaksi Sah"| DB
+    WAF -->|"Valid :80"| NGINX
+    NGINX -->|"LB :3000"| APP
+    APP -->|"WRITE (concert_id % 3)"| PGB
+    APP -->|"READ (app_reader)"| S1 & S2 & S3
 ```
+
+> File editable **draw.io** (format hitam-putih vertikal atas-ke-bawah): **[docs/arsitektur-sistem-wartiket.drawio](docs/arsitektur-sistem-wartiket.drawio)**
 
 ---
 
 ## 4. Skema Jaringan & Komponen Klaster
 
-### A. Konfigurasi Jaringan Overlay Docker
+### A. Konfigurasi Jaringan Overlay Docker & Port Hardening
 Klaster menggunakan jaringan terisolasi bertipe `overlay` dengan opsi `attachable: true`:
 - **Nama Jaringan:** `wartiket-net`
-- **Driver:** `overlay` (Mendukung multi-container routing dan abstraksi virtual IP)
-- **Port Publik Terbuka:** Port `80` (HTTP) dan `443` (HTTPS) yang dipetakan langsung ke kontainer Nginx.
-- **Port Internal Terlindungi:** Port `3000` (Node.js API), `6379` (Redis), dan `5432` (PostgreSQL) tidak diekspos ke host luar, melainkan hanya dapat diakses antar-kontainer dalam jaringan `wartiket-net`.
+- **Driver:** `overlay`
+- **Port Publik Terbuka (ONLY):** Port `80` (HTTP) dan `443` (HTTPS) **hanya pada `wartiket_waf`**.
+- **Port Internal Terlindungi:** Nginx LB (`80`), App (`3000`), Redis (`6379`), PgBouncer/PostgreSQL Primary & Replica (`5432`), MinIO (`9000/9001`), dan Honeypot (`8081`) **tidak diekspos ke publik**.
 
 ### B. Rincian Spesifikasi Layanan Container
 
 | Nama Layanan Swarm | Image Docker | Default Replika | Batasan CPU | Batasan RAM | Peran & Fungsi Utama |
 |---|---|---|---|---|---|
-| `wartiket_nginx` | `wartiket-nginx:latest` | 2 (High Availability) | 0.25 Core | 256 MB | Reverse Proxy layer 7, buffer koneksi klien (`worker_connections 10240`), *upstream keepalive*, dan penyeimbang beban awal. |
-| `wartiket_app` | `wartiket-app:latest` | 2 (Dapat diskalakan 2 $\rightarrow$ 8) | 0.25 Core | 256 MB | Worker Node.js Mock API yang mengeksekusi logika transaksi, menyuntikkan *artificial delay* 50–100ms, dan mengembalikan identitas kontainer (`ServedBy`). |
-| `wartiket_redis` | `redis:7-alpine` | 1 | 0.25 Core | 256 MB | Penyimpan status memori kilat untuk *locking* kursi dan pengurangan kuota atomik menggunakan *Lua Scripting*, dilengkapi *AOF Persistence*. |
-| `wartiket_db` | `postgres:16-alpine` | 1 | 0.50 Core | 512 MB | Basis data relasional ACID untuk menyimpan tabel pengguna, data konser musik, denah kursi, dan riwayat pesanan tiket resmi. |
+| `wartiket_waf` | `wartiket-waf:latest` | 2 (HA) | 0.25 Core | 128 MB | Perimeter WAF (Port 80/443): blokir SQLi, XSS, LFI, scanner bot, rate-limit, & divert probe ke Honeypot. |
+| `wartiket_honeypot` | `wartiket-honeypot:latest` | 1 | 0.10 Core | 64 MB | Sistem umpan (`/wp-admin`, `/.env`, `/phpmyadmin`) dengan canary token & ekspor metrik Prometheus. |
+| `wartiket_nginx` | `wartiket-nginx:latest` | 2 (HA) | 0.25 Core | 256 MB | Internal Load Balancer + **CDN Edge Pull-Through Cache** (`proxy_cache`) untuk aset statis dari MinIO. |
+| `wartiket_minio` | `minio/minio:latest` | 1 | 0.25 Core | 256 MB | Object Storage (S3-compatible) penyimpan poster konser, gambar, CSS, dan JS (`wartiket-assets`). |
+| `wartiket_app` | `wartiket-app:latest` | 2 (Scale 2 → 8) | 0.25 Core | 256 MB | Stateless Worker API: Read/Write splitting, 2-step checkout (TTL 5 menit), RBAC/IDOR guard. |
+| `wartiket_redis` | `redis:7-alpine` | 1 | 0.25 Core | 256 MB | Stateless Login Session, Waiting Queue, Hot Cache, & temporary seat lock (non-finansial). |
+| `wartiket_pgbouncer` | `edoburu/pgbouncer:latest` | 1 | 0.25 Core | 128 MB | Connection Pooler (`1.000 client → 30/shard`) + router tulis ke `wartiket_shard1..3`. |
+| `wartiket_db-shard1..3-primary` | `postgres:16-alpine` | 3 (Master) | 0.35 Core | 384 MB | 3 Shard PostgreSQL 16 Master (`concert_id % 3`, role `app_writer`) + WAL Replication. |
+| `wartiket_db-shard1..3-replica` | `postgres:16-alpine` | 3 (Slave) | 0.25 Core | 256 MB | 3 Shard PostgreSQL 16 Hot Standby Read Replica (role `app_reader` *SELECT-only*). |
+
+> Matriks hak akses lengkap, kredensial least-privilege, pola komunikasi, dan rancangan Sharding tersedia pada **[docs/SECURITY_ACCESS_MATRIX.md](docs/SECURITY_ACCESS_MATRIX.md)**.
 
 ---
 
@@ -287,55 +306,68 @@ curl -I http://localhost/health
 ## 9. Struktur Direktori Repositori
 
 ```text
-├── app/                                 # Sumber Kode Backend & Frontend
+├── waf/                                 # Layer 1: WAF Perimeter (Satu-satunya port publik 80/443)
+│   ├── Dockerfile                       # Image Nginx Alpine WAF
+│   └── waf.conf                         # Proteksi SQLi/XSS/LFI/Bad-Bot + Routing ke Honeypot
+├── honeypot/                            # Layer 1: Decoy Trap & Prometheus Telemetry
+│   ├── Dockerfile                       # Image Node.js Honeypot (internal :8081)
+│   └── server.js                        # Trap /wp-admin, /.env, /phpmyadmin + /metrics
+├── nginx/                               # Layer 2: Internal Load Balancer & CDN Edge Cache
+│   ├── Dockerfile                       # Image Nginx Alpine LB + CDN Cache
+│   ├── nginx.conf                       # Reverse proxy, keepalive 128, CDN pull-through MinIO
+│   └── ssl/                             # Sertifikat TLS lokal wartiketkonser.id
+├── app/                                 # Layer 3: Stateless Node.js Workers & Frontend SPA
 │   ├── public/                          # Antarmuka Web Pembeli & Admin (SPA)
-│   │   ├── css/style.css                # Tampilan UI Modern Responsif (Flexbox/Grid)
-│   │   ├── js/app.js                    # SPA Controller, War Engine & Anti-Stuck Logic
-│   │   ├── img/                         # Asset visual katalog konser
-│   │   └── index.html                   # HTML Tunggal (SPA Hash Routing)
+│   │   ├── css/style.css                # Tampilan UI Responsif (Flexbox/Grid)
+│   │   ├── js/app.js                    # SPA Controller, War Engine & 2-Step Checkout
+│   │   ├── img/                         # Poster konser lokal (di-sync ke MinIO CDN)
+│   │   └── index.html                   # HTML Tunggal (SPA Routing)
 │   ├── src/                             # Arsitektur Modular Backend
-│   │   ├── config/                      # Koneksi Redis & PostgreSQL Pool
-│   │   ├── controllers/                 # Kontroler Auth, Tiket, Antrean, dan Konser
+│   │   ├── config/                      # Router 3-Shard PostgreSQL (Primary/Replica) & Redis
+│   │   ├── controllers/                 # Kontroler Auth, Tiket (2-Step Hold), Antrean & Konser
+│   │   ├── utils/jwt.js                 # Verifikasi JWT HS256 & RBAC Admin
 │   │   └── routes/api.js                # Router RESTful API
-│   ├── Dockerfile                       # Konfigurasi container Node.js Mock API
-│   ├── package.json                     # Dependencies Express, ioredis, pg, jsonwebtoken
-│   ├── schema.sql                       # Struktur database relasional
-│   ├── seed.sql                         # Data awal 1.000 akun dummy & data konser
-│   ├── server.js                        # Entrypoint API & Artificial Delay Injection
-│   └── test.js                          # Unit test verifikasi logika internal
-├── nginx/                               # Konfigurasi Reverse Proxy & Ingress
-│   ├── Dockerfile                       # Image Nginx Alpine kustom
-│   └── nginx.conf                       # Konfigurasi buffering, timeout & keepalive 128
-├── monitoring/                          # Stack Monitoring Pertemuan 5
-│   ├── prometheus.yml                   # Scrape target cAdvisor & Node Exporter
+│   ├── Dockerfile                       # Konfigurasi container Node.js Worker
+│   ├── package.json                     # Dependencies Express, ioredis, pg
+│   ├── schema.sql                       # Struktur database relasional + TTL expires_at
+│   ├── seed.sql                         # Data awal akun dummy & katalog konser
+│   ├── server.js                        # Entrypoint API, Lua Atomic Lock & Sweeper
+│   └── test.js                          # Unit test logika Redis, JWT, 2-Step Hold & Sharding
+├── db/                                  # Layer 4 & 5: PgBouncer Pooler & 3 Master + 3 Slave PG16
+│   ├── pgbouncer.ini                    # Pooler transaksi untuk wartiket_s1 / s2 / s3
+│   ├── userlist.txt                     # Kredensial least-privilege app_writer / app_reader
+│   ├── init-primary.sh                  # Setup role replikasi & least-privilege pada Primary
+│   └── replica-entrypoint.sh            # Auto pg_basebackup streaming replication pada Replica
+├── monitoring/                          # Stack Observabilitas (Prometheus + Grafana + cAdvisor)
+│   ├── prometheus.yml                   # Scrape target cAdvisor, Node Exporter & Honeypot
 │   └── grafana/                         # Datasource & Dashboard Swarm auto-provisioning
-├── docs/                                # Laporan Akademik & Materi Presentasi
-│   ├── PRESENTASI.md                    # Panduan presentasi & demo lengkap Pertemuan 1-5
-│   ├── Laporan_Progres_Pertemuan_1_*.pdf # Laporan Pertemuan 1
-│   ├── Laporan_Progres_Gabungan_*.pdf   # Laporan Pertemuan 2 & 3
-│   ├── Laporan_Hasil_Testing_*.xlsx     # Data log audit performa
-│   └── diagram_*.png                    # Diagram topologi jaringan dan arsitektur
+├── scripts/                             # Otomasi Klaster
+│   └── swarm-autoscaler.mjs             # Dynamic Auto-Scaler (2 <-> 8 worker via CPU/Queue)
+├── docs/                                # Arsitektur, Matriks Keamanan & Laporan Akademik
+│   ├── arsitektur-sistem-wartiket.drawio # Diagram arsitektur 5-Layer + 3+3 Sharding (Draw.io)
+│   ├── diagram_arsitektur_sistem.png    # Ekspor PNG arsitektur 5-Layer + 3+3 Sharding
+│   ├── SECURITY_ACCESS_MATRIX.md        # Matriks akses, isolasi jaringan & threat model
+│   └── PRESENTASI.md                    # Panduan presentasi & demo lengkap Pertemuan 1-5
 ├── load-test/                           # Skrip Pengujian Beban k6
 │   ├── load-test-demo.js                # Uji beban bertahap 45 detik (10-1000 VU)
 │   ├── load-test-failover.js            # Skenario failover konstan 1.000 VU (90 detik)
 │   ├── load-test-1000-users.js          # Skenario flash crowd instant 1.000 VU
-│   └── load-test.js                     # Skenario k6 10-1000 VU 3 menit SLA check
+│   └── load-test.js                     # Skenario k6 10-1000 VU 3 menit + 2-Step Checkout
 ├── tests/                               # Rangkaian Verifikasi Otomatis
-│   ├── e2e-war-tiket.mjs                # Browser Automation E2E (Chrome/Edge CDP)
-│   └── verify-concurrency-and-lock.js   # Uji race condition & validasi atomik lock
-├── docker-compose.yml                   # Spesifikasi Docker Swarm & Resource Limits
+│   ├── verify-revised-architecture.js   # Verifikasi WAF, Honeypot, CDN, RBAC, 2-Step & 3+3 DB
+│   ├── verify-concurrency-and-lock.js   # Uji race condition & validasi atomik lock
+│   └── e2e-war-tiket.mjs                # Browser Automation E2E (Chrome/Edge CDP)
+├── docker-compose.yml                   # Stack Docker Swarm (5-Layer + 3 Master + 3 Slave)
 ├── docker-compose.monitoring.yml        # Stack monitoring (Prometheus + Grafana + cAdvisor)
 ├── demo-pertemuan-3.ps1                 # Runner PowerShell interaktif Pertemuan 3
 ├── demo-pertemuan-4.ps1                 # Runner PowerShell interaktif Pertemuan 4
 ├── demo-pertemuan-5.ps1                 # Runner PowerShell interaktif Pertemuan 5
 ├── test-failover-demo.js                # Pengujian failover otomatis Redis 5 langkah
 ├── test-quick.js                        # Pengujian verifikasi load balancing 20 request
-├── start.bat                            # Skrip startup klaster 1-klik
-├── stop.bat                             # Skrip shutdown klaster 1-klik
-├── status.bat                           # Skrip pengecekan kesehatan klaster
-├── scale.bat                            # Skrip dynamic auto-scaling worker
-├── dr-test.bat                          # Skrip pengujian disaster recovery pertemuan 4
-├── run-k6.bat                           # Skrip pengujian beban k6 otomatis
+├── start.bat / stop.bat / status.bat    # Skrip operasional klaster 1-klik
+├── scale.bat / dr-test.bat / run-k6.bat # Skrip scaling, DR test & load test k6
+├── aktifkan-domain-wartiketkonser.bat   # Registrasi domain lokal & cdn.wartiketkonser.id
+├── install-ssl-cert.bat                 # Instalasi sertifikat TLS lokal
 └── README.md                            # Dokumentasi resmi proyek
 ```
 

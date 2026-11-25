@@ -19,15 +19,16 @@ Read-Host "Tekan [ENTER] untuk memulai BAGIAN B: Kill Container Saat Beban 1000 
 Write-Host "`n=== BAGIAN B: FAILOVER CONTAINER DI BAWAH BEBAN 1000 VU ===" -ForegroundColor Cyan
 
 # Pastikan 8 replika dan stok penuh
+$AdminHeaders = @{ "X-Admin-Key" = "wartiket-admin-2026" }
 docker service scale wartiket_app=8
 Start-Sleep -Seconds 3
-Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 100000}'
+Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -Headers $AdminHeaders -ContentType "application/json" -Body '{"stock": 100000}'
 Write-Host "8 replika aktif, stok 100.000 tiket.`n" -ForegroundColor Green
 
 Write-Host "INSTRUKSI MANUAL UNTUK OPERATOR:" -ForegroundColor Red
 Write-Host "  1. Script k6 akan berjalan 90 detik dengan 1000 VU konstan." -ForegroundColor White
 Write-Host "  2. Pada DETIK KE-30, buka terminal BARU dan jalankan:" -ForegroundColor White
-Write-Host '     docker rm -f $(docker ps -q -f name=wartiket_app | head -3)' -ForegroundColor Yellow
+Write-Host '     docker ps -q -f name=wartiket_app | Select-Object -First 3 | ForEach-Object { docker rm -f $_ }' -ForegroundColor Yellow
 Write-Host "     (Membunuh paksa 3 dari 8 worker container)" -ForegroundColor White
 Write-Host "  3. Amati: k6 tetap berjalan, error rate naik sesaat lalu pulih.`n" -ForegroundColor White
 

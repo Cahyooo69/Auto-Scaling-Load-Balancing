@@ -1,0 +1,2 @@
+"app_writer" "writer_secret_2026"
+"wartiket" "wartiket_secret"

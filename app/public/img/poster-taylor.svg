@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b0764"/>
+      <stop offset="55%" stop-color="#7e22ce"/>
+      <stop offset="100%" stop-color="#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g3)"/>
+  <circle cx="950" cy="170" r="185" fill="#fda4af" opacity="0.24"/>
+  <circle cx="240" cy="520" r="210" fill="#c084fc" opacity="0.2"/>
+  <text x="80" y="250" fill="#fbcfe8" font-family="Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="4">STADIUM TOUR 2027</text>
+  <text x="80" y="340" fill="#ffffff" font-family="Arial,sans-serif" font-size="74" font-weight="900">TAYLOR SWIFT</text>
+  <text x="80" y="405" fill="#fdf2f8" font-family="Arial,sans-serif" font-size="34" font-weight="600">The Eras Tour &#8226; Jakarta Int. Stadium</text>
+</svg>

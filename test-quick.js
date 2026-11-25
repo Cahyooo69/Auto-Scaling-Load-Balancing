@@ -34,7 +34,7 @@ async function sendBuyRequest(id) {
       resolve({ id, status: 'ERROR', duration: Date.now() - start, error: err.message });
     });
 
-    req.write(JSON.stringify({ userId: `quick_user_${id}` }));
+    req.write(JSON.stringify({ userId: id }));
     req.end();
   });
 }

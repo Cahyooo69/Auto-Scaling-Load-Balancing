@@ -28,10 +28,11 @@ Write-Host ""
 Read-Host "Tekan [ENTER] setelah login Grafana dan membuka dashboard 'War Tiket - Docker Swarm Monitoring'"
 
 # --- LANGKAH 3: Final Load Test Sambil Pantau Grafana ---
+$AdminHeaders = @{ "X-Admin-Key" = "wartiket-admin-2026" }
 Write-Host "`n=== LANGKAH 3: FINAL LOAD TEST SAMBIL PANTAU GRAFANA REAL-TIME ===" -ForegroundColor Cyan
 docker service scale wartiket_app=2
 Start-Sleep -Seconds 2
-Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 50000}'
+Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -Headers $AdminHeaders -ContentType "application/json" -Body '{"stock": 50000}'
 Write-Host "Baseline: 2 replika, stok 50.000`n" -ForegroundColor Green
 
 Read-Host "Tekan [ENTER] untuk mulai uji beban 2 replika (amati CPU/Memory naik di Grafana)"
@@ -42,7 +43,7 @@ Write-Host ""
 Write-Host "=== LANGKAH 4: SCALE-OUT KE 8 REPLIKA DAN UJI ULANG ===" -ForegroundColor Cyan
 docker service scale wartiket_app=8
 Start-Sleep -Seconds 3
-Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -ContentType "application/json" -Body '{"stock": 50000}'
+Invoke-RestMethod -Method Post -Uri "http://localhost/tickets/reset" -Headers $AdminHeaders -ContentType "application/json" -Body '{"stock": 50000}'
 Write-Host "8 replika aktif, stok di-reset.`n" -ForegroundColor Green
 
 Read-Host "Tekan [ENTER] untuk mulai uji beban 8 replika (amati CPU terdistribusi merata di Grafana)"

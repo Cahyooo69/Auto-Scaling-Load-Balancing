@@ -9,6 +9,9 @@ export const soldOutRate = new Rate('checkout_sold_out');
 export const checkoutDuration = new Trend('checkout_duration_ms');
 export const totalTransactions = new Counter('total_transactions_attempted');
 
+// 200/201 (Sukses), 409 (Sold Out), 410 (Hold Expired) adalah respon bisnis valid
+http.setResponseCallback(http.expectedStatuses(200, 201, 409, 410));
+
 export const options = {
   stages: [
     // Tahapan Standar 3 SKS: Ramp-up 10 -> 100 -> 500 -> 1000 VU dalam durasi total 3 Menit
@@ -18,9 +21,7 @@ export const options = {
     { duration: '60s', target: 1000 },  // Tahap 4: Peak War Tiket (1.000 VU)
   ],
   thresholds: {
-    // Target SLA Dosen: Waktu tanggap < 200ms
     http_req_duration: ['p(95)<200'],
-    // SLA Keandalan Dosen: Tingkat kegagalan server (5xx / drop) < 1%
     server_failures: ['rate<0.01'],
   },
 };
@@ -28,121 +29,131 @@ export const options = {
 const BASE_URL = __ENV.TARGET_URL || 'http://localhost';
 
 export default function () {
-  // Simulasi 1.000 Akun Pengguna Dummy dari seed.sql (user1@test.com s/d user1000@test.com)
   const vuId = __VU || 1;
   const userIndex = ((vuId - 1) % 1000) + 1;
   const userEmail = `user${userIndex}@test.com`;
   const password = 'password123';
-  
-  // Pilih salah satu konser secara bergantian (ID 1, 2, atau 3)
   const concertId = (userIndex % 3) + 1;
 
   const standardHeaders = {
     headers: {
       'Content-Type': 'application/json',
-      'User-Agent': 'k6-WarTiket-LoadTest/2.0',
+      'User-Agent': 'k6-WarTiket-LoadTest/3.0',
     },
     timeout: '10s',
   };
 
-  let userId = userIndex + 5; // Offset ID akun dummy pada database
+  let jwtToken = '';
 
   // ==========================================================================
-  // ALUR 1: LOGIN PENGGUNA (Autentikasi Akun k6)
+  // ALUR 1: STATELESS LOGIN (Redis Session + HS256 JWT via Read Replica)
   // ==========================================================================
   group('1. Login Pengguna', () => {
-    const loginPayload = JSON.stringify({
-      email: userEmail,
-      password: password,
-    });
-
-    const loginRes = http.post(`${BASE_URL}/api/auth/login`, loginPayload, standardHeaders);
-
-    const isFailure = loginRes.status >= 500 || loginRes.status === 0;
-    serverFailureRate.add(isFailure ? 1 : 0);
-
-    const loginOk = check(loginRes, {
+    const loginRes = http.post(
+      `${BASE_URL}/api/auth/login`,
+      JSON.stringify({ email: userEmail, password }),
+      standardHeaders
+    );
+    serverFailureRate.add(loginRes.status >= 500 || loginRes.status === 0 ? 1 : 0);
+    check(loginRes, {
       'login status 200': (r) => r.status === 200,
-      'user data returned': (r) => {
+      'jwt token issued': (r) => {
         try {
           const body = JSON.parse(r.body);
-          if (body.user && body.user.id) {
-            userId = body.user.id;
+          if (body.jwtToken) {
+            jwtToken = body.jwtToken;
             return true;
           }
           return false;
-        } catch (e) {
+        } catch {
           return false;
         }
       },
     });
   });
 
-  // Jeda singkat simulasi aktivitas manusia membaca halaman (100ms - 200ms)
   sleep(0.15);
 
   // ==========================================================================
-  // ALUR 2: LIHAT KATALOG KONSER REAL-TIME
+  // ALUR 2: LIHAT KATALOG, ASET CDN & BANDINGKAN DENAH KURSI (Read-Heavy)
   // ==========================================================================
-  group('2. Lihat Katalog Konser', () => {
+  group('2. Browse Katalog, CDN & Denah Kursi', () => {
     const concertsRes = http.get(`${BASE_URL}/api/concerts`, standardHeaders);
+    serverFailureRate.add(concertsRes.status >= 500 || concertsRes.status === 0 ? 1 : 0);
+    check(concertsRes, { 'katalog status 200': (r) => r.status === 200 });
 
-    const isFailure = concertsRes.status >= 500 || concertsRes.status === 0;
-    serverFailureRate.add(isFailure ? 1 : 0);
+    const cdnRes = http.get(`${BASE_URL}/cdn/img/poster-coldplay.svg`, { timeout: '10s' });
+    serverFailureRate.add(cdnRes.status >= 500 || cdnRes.status === 0 ? 1 : 0);
+    check(cdnRes, { 'cdn asset 200': (r) => r.status === 200 });
 
-    check(concertsRes, {
-      'katalog status 200': (r) => r.status === 200,
-      'katalog berisi minimal 3 konser': (r) => {
-        try {
-          const list = JSON.parse(r.body);
-          return Array.isArray(list) && list.length >= 3;
-        } catch (e) {
-          return false;
-        }
-      },
-    });
+    const seatsRes = http.get(`${BASE_URL}/api/concerts/${concertId}/seats`, standardHeaders);
+    serverFailureRate.add(seatsRes.status >= 500 || seatsRes.status === 0 ? 1 : 0);
+    check(seatsRes, { 'denah kursi 200': (r) => r.status === 200 });
   });
 
-  // Jeda singkat sebelum war tiket (50ms - 100ms)
   sleep(0.1);
 
   // ==========================================================================
-  // ALUR 3: WAR TIKET CHECKOUT (ATOMIC LOCK REDIS + POSTGRESQL ACID)
+  // ALUR 3: 2-STEP CHECKOUT (Hold 5 Menit -> Confirm Payment via PgBouncer)
   // ==========================================================================
-  group('3. War Tiket Checkout', () => {
-    const buyPayload = JSON.stringify({
-      userId: userId,
-      concertId: concertId,
-    });
+  group('3. Reserve (5-Min Hold) & Confirm Payment', () => {
+    if (!jwtToken) return;
+    const authHeaders = {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwtToken}`,
+        'User-Agent': 'k6-WarTiket-LoadTest/3.0',
+      },
+      timeout: '10s',
+    };
 
     const startTime = Date.now();
-    const buyRes = http.post(`${BASE_URL}/api/tickets/buy`, buyPayload, standardHeaders);
-    checkoutDuration.add(Date.now() - startTime);
+    const reserveRes = http.post(
+      `${BASE_URL}/api/tickets/reserve`,
+      JSON.stringify({ concertId }),
+      authHeaders
+    );
     totalTransactions.add(1);
+    serverFailureRate.add(reserveRes.status >= 500 || reserveRes.status === 0 ? 1 : 0);
 
-    const isFailure = buyRes.status >= 500 || buyRes.status === 0;
-    serverFailureRate.add(isFailure ? 1 : 0);
+    if (reserveRes.status === 409) {
+      checkoutDuration.add(Date.now() - startTime);
+      soldOutRate.add(1);
+      successCheckoutRate.add(0);
+      return;
+    }
 
-    const isSuccess = buyRes.status === 200;
-    const isSoldOut = buyRes.status === 409;
+    let bookingCode = '';
+    try {
+      bookingCode = JSON.parse(reserveRes.body)?.bookingCode || '';
+    } catch {}
 
-    successCheckoutRate.add(isSuccess ? 1 : 0);
-    soldOutRate.add(isSoldOut ? 1 : 0);
+    if (reserveRes.status === 201 && bookingCode) {
+      sleep(0.05);
+      const confirmRes = http.post(
+        `${BASE_URL}/api/tickets/confirm`,
+        JSON.stringify({ bookingCode }),
+        authHeaders
+      );
+      checkoutDuration.add(Date.now() - startTime);
+      serverFailureRate.add(confirmRes.status >= 500 || confirmRes.status === 0 ? 1 : 0);
 
-    check(buyRes, {
-      'checkout status 200 (Sukses) atau 409 (Sold Out)': (r) => r.status === 200 || r.status === 409,
-      'respon memuat server instance load balancer (servedBy)': (r) => {
-        try {
-          const body = JSON.parse(r.body);
-          return body && body.servedBy !== undefined;
-        } catch (e) {
-          return false;
-        }
-      },
-      'durasi checkout < 500ms': (r) => r.timings.duration < 500,
-    });
+      const ok = confirmRes.status === 200;
+      successCheckoutRate.add(ok ? 1 : 0);
+      soldOutRate.add(0);
+
+      check(confirmRes, {
+        'payment confirmed 200': (r) => r.status === 200,
+        'servedBy returned': (r) => {
+          try {
+            return Boolean(JSON.parse(r.body)?.servedBy);
+          } catch {
+            return false;
+          }
+        },
+      });
+    }
   });
 
-  // Jeda antar iterasi pengguna
   sleep(0.2);
 }

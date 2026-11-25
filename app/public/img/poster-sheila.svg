@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#064e3b"/>
+      <stop offset="55%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g2)"/>
+  <circle cx="940" cy="180" r="190" fill="#fde68a" opacity="0.22"/>
+  <circle cx="260" cy="500" r="210" fill="#34d399" opacity="0.18"/>
+  <text x="80" y="250" fill="#fde68a" font-family="Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="4">LIVE IN JAKARTA 2027</text>
+  <text x="80" y="340" fill="#ffffff" font-family="Arial,sans-serif" font-size="76" font-weight="900">SHEILA ON 7</text>
+  <text x="80" y="405" fill="#ecfdf5" font-family="Arial,sans-serif" font-size="34" font-weight="600">Tunggu Aku Di Jakarta &#8226; JIExpo</text>
+</svg>

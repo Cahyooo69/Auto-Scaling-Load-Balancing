@@ -1,5 +1,232 @@
 services:
-  # Redis: In-memory store for atomic ticket locking & inventory management (with AOF persistence)
+  # ============================================================================
+  # LAYER 1: PERIMETER SECURITY (WAF + HONEYPOT) — ONLY PORTS 80 & 443 EXPOSED
+  # ============================================================================
+  waf:
+    image: wartiket-waf:latest
+    build:
+      context: .
+      dockerfile: waf/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 2s
+        window: 10s
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/waf-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+
+  honeypot:
+    image: wartiket-honeypot:latest
+    build:
+      context: ./honeypot
+      dockerfile: Dockerfile
+    environment:
+      - HONEYPOT_PORT=8081
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 2s
+        window: 10s
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 24M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+
+  # ============================================================================
+  # LAYER 2: INTERNAL LOAD BALANCER, CDN EDGE CACHE & OBJECT STORAGE (MinIO)
+  # ============================================================================
+  nginx:
+    image: wartiket-nginx:latest
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 2s
+        window: 10s
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+
+  minio:
+    image: bitnamilegacy/minio:latest
+    environment:
+      - MINIO_ROOT_USER=wartiket_minio
+      - MINIO_ROOT_PASSWORD=minio_secret_2026
+      - MINIO_DEFAULT_BUCKETS=wartiket-assets:download
+    volumes:
+      - minio-data:/bitnami/minio/data
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 3s
+        window: 15s
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 384M
+        reservations:
+          cpus: '0.05'
+          memory: 96M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio-init:
+    image: bitnamilegacy/minio-client:latest
+    environment:
+      - MC_CONFIG_DIR=/tmp/.mc
+    volumes:
+      - ./app/public:/assets:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        until mc --config-dir /tmp/.mc alias set cdn http://minio:9000 wartiket_minio minio_secret_2026; do
+          echo "[MinIO-Init] Waiting for MinIO..."
+          sleep 2
+        done
+        mc --config-dir /tmp/.mc mb --ignore-existing cdn/wartiket-assets
+        mc --config-dir /tmp/.mc anonymous set download cdn/wartiket-assets
+        mc --config-dir /tmp/.mc cp --recursive /assets/img cdn/wartiket-assets/
+        mc --config-dir /tmp/.mc cp --recursive /assets/css cdn/wartiket-assets/
+        mc --config-dir /tmp/.mc cp --recursive /assets/js cdn/wartiket-assets/
+        echo "[MinIO-Init] Static assets synced to bucket wartiket-assets."
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 3s
+        max_attempts: 10
+      resources:
+        limits:
+          cpus: '0.15'
+          memory: 128M
+
+  # ============================================================================
+  # LAYER 3: STATELESS APPLICATION WORKERS (ELASTIC 2 -> 8 REPLICAS)
+  # ============================================================================
+  app:
+    image: wartiket-app:latest
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # 3-Shard Horizontal Partitioning (3 Primary Master + 3 Read Replica Slave)
+      - DB_SHARD_COUNT=3
+      - DB_WRITE_HOST=pgbouncer
+      - DB_WRITE_PORT=5432
+      - DB_WRITE_USER=app_writer
+      - DB_WRITE_PASSWORD=writer_secret_2026
+      - DB_READ_PORT=5432
+      - DB_READ_USER=app_reader
+      - DB_READ_PASSWORD=reader_secret_2026
+      - DB_ADMIN_PORT=5432
+      - DB_ADMIN_USER=wartiket
+      - DB_ADMIN_PASSWORD=wartiket_secret
+      - DB_NAME=wartiket_db
+      - DB_SHARD1_DB=wartiket_shard1
+      - DB_SHARD1_ADMIN_HOST=db-shard1-primary
+      - DB_SHARD1_READ_HOST=db-shard1-replica
+      - DB_SHARD2_DB=wartiket_shard2
+      - DB_SHARD2_ADMIN_HOST=db-shard2-primary
+      - DB_SHARD2_READ_HOST=db-shard2-replica
+      - DB_SHARD3_DB=wartiket_shard3
+      - DB_SHARD3_ADMIN_HOST=db-shard3-primary
+      - DB_SHARD3_READ_HOST=db-shard3-replica
+      - DB_POOL_MAX=10
+      - DB_READ_POOL_MAX=10
+      - QUEUE_MAX_ACTIVE=200
+      - BOOKING_HOLD_TTL_SEC=300
+      - INITIAL_STOCK=1000
+      - JWT_SECRET=wartiket-cloud-jwt-secret-2026
+      - ADMIN_API_KEY=wartiket-admin-2026
+      - HONEYPOT_URL=http://honeypot:8081
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 2s
+        window: 10s
+      update_config:
+        parallelism: 2
+        delay: 5s
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # ============================================================================
+  # LAYER 4: IN-MEMORY SESSION STORE, WAITING QUEUE & HOT CACHE (REDIS)
+  # ============================================================================
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--save", "60 1", "--dir", "/data"]
@@ -27,16 +254,16 @@ services:
       retries: 3
       start_period: 2s
 
-  # Relational Database: PostgreSQL 16 (ACID storage for users, concerts, seats, transactions)
-  db:
-    image: postgres:16-alpine
-    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=128MB"]
-    environment:
-      - POSTGRES_DB=wartiket_db
-      - POSTGRES_USER=wartiket
-      - POSTGRES_PASSWORD=wartiket_secret
+  # ============================================================================
+  # LAYER 5: SHARDED DATABASE HA (1 PgBouncer + 3 Master + 3 Slave = 6 DBs)
+  # Total DB RAM Limit: 3 x (384M + 256M) = 1.92 GB (Safe for 16 GB Laptop)
+  # ============================================================================
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    entrypoint: ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - ./db/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./db/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     networks:
       - wartiket-net
     deploy:
@@ -47,94 +274,185 @@ services:
         window: 10s
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.25'
+          memory: 128M
         reservations:
-          cpus: '0.10'
-          memory: 64M
+          cpus: '0.05'
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # --- SHARD 1 (Konser 1: Coldplay — concert_id % 3 == 1) ---
+  db-shard1-primary:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=150", "-c", "shared_buffers=96MB", "-c", "wal_level=replica", "-c", "max_wal_senders=3", "-c", "max_replication_slots=3", "-c", "hot_standby=on"]
+    environment:
+      - POSTGRES_DB=wartiket_db
+      - POSTGRES_USER=wartiket
+      - POSTGRES_PASSWORD=wartiket_secret
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - DB_WRITE_PASSWORD=writer_secret_2026
+      - DB_READ_PASSWORD=reader_secret_2026
+    volumes:
+      - db-shard1-primary-data:/var/lib/postgresql/data
+      - ./db/init-primary.sh:/docker-entrypoint-initdb.d/00-init-primary.sh:ro
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 2s, window: 10s }
+      resources:
+        limits: { cpus: '0.35', memory: 384M }
+        reservations: { cpus: '0.05', memory: 64M }
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wartiket -d wartiket_db"]
       interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 3s
+      retries: 5
+      start_period: 5s
 
-  # Node.js API Worker Service (3 initial replicas -> up to 8 replicas on scale)
-  app:
-    image: wartiket-app:latest
-    build:
-      context: ./app
-      dockerfile: Dockerfile
+  db-shard1-replica:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/usr/local/bin/replica-entrypoint.sh"]
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=wartiket_db
-      - DB_USER=wartiket
-      - DB_PASSWORD=wartiket_secret
-      - DB_POOL_MAX=20
-      - QUEUE_MAX_ACTIVE=200
-      - INITIAL_STOCK=1000
-      - JWT_SECRET=wartiket-cloud-jwt-secret-2026
+      - PRIMARY_HOST=db-shard1-primary
+      - PRIMARY_PORT=5432
+      - DB_REPLICATOR_USER=replicator
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - db-shard1-replica-data:/var/lib/postgresql/data
+      - ./db/replica-entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
     networks:
       - wartiket-net
     deploy:
-      replicas: 2
-      restart_policy:
-        condition: any
-        delay: 2s
-        window: 10s
-      update_config:
-        parallelism: 2
-        delay: 5s
-        order: start-first
+      replicas: 1
+      restart_policy: { condition: any, delay: 3s, window: 15s }
       resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.10'
-          memory: 64M
+        limits: { cpus: '0.25', memory: 256M }
+        reservations: { cpus: '0.05', memory: 48M }
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      test: ["CMD-SHELL", "pg_isready -U app_reader -d wartiket_db"]
       interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 3s
+      retries: 5
+      start_period: 15s
 
-  # Nginx: Reverse Proxy & Ingress Load Balancer (High Availability: 2 Replicas)
-  nginx:
-    image: wartiket-nginx:latest
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
-    ports:
-      - "80:80"
-      - "443:443"
+  # --- SHARD 2 (Konser 2: Sheila on 7 — concert_id % 3 == 2) ---
+  db-shard2-primary:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=150", "-c", "shared_buffers=96MB", "-c", "wal_level=replica", "-c", "max_wal_senders=3", "-c", "max_replication_slots=3", "-c", "hot_standby=on"]
+    environment:
+      - POSTGRES_DB=wartiket_db
+      - POSTGRES_USER=wartiket
+      - POSTGRES_PASSWORD=wartiket_secret
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - DB_WRITE_PASSWORD=writer_secret_2026
+      - DB_READ_PASSWORD=reader_secret_2026
+    volumes:
+      - db-shard2-primary-data:/var/lib/postgresql/data
+      - ./db/init-primary.sh:/docker-entrypoint-initdb.d/00-init-primary.sh:ro
     networks:
       - wartiket-net
     deploy:
-      replicas: 2
-      restart_policy:
-        condition: any
-        delay: 2s
-        window: 10s
+      replicas: 1
+      restart_policy: { condition: any, delay: 2s, window: 10s }
       resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.10'
-          memory: 64M
+        limits: { cpus: '0.35', memory: 384M }
+        reservations: { cpus: '0.05', memory: 64M }
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      test: ["CMD-SHELL", "pg_isready -U wartiket -d wartiket_db"]
       interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 3s
+      retries: 5
+      start_period: 5s
+
+  db-shard2-replica:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/usr/local/bin/replica-entrypoint.sh"]
+    environment:
+      - PRIMARY_HOST=db-shard2-primary
+      - PRIMARY_PORT=5432
+      - DB_REPLICATOR_USER=replicator
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - db-shard2-replica-data:/var/lib/postgresql/data
+      - ./db/replica-entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 3s, window: 15s }
+      resources:
+        limits: { cpus: '0.25', memory: 256M }
+        reservations: { cpus: '0.05', memory: 48M }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_reader -d wartiket_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # --- SHARD 3 (Konser 3: Taylor Swift — concert_id % 3 == 0) ---
+  db-shard3-primary:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=150", "-c", "shared_buffers=96MB", "-c", "wal_level=replica", "-c", "max_wal_senders=3", "-c", "max_replication_slots=3", "-c", "hot_standby=on"]
+    environment:
+      - POSTGRES_DB=wartiket_db
+      - POSTGRES_USER=wartiket
+      - POSTGRES_PASSWORD=wartiket_secret
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - DB_WRITE_PASSWORD=writer_secret_2026
+      - DB_READ_PASSWORD=reader_secret_2026
+    volumes:
+      - db-shard3-primary-data:/var/lib/postgresql/data
+      - ./db/init-primary.sh:/docker-entrypoint-initdb.d/00-init-primary.sh:ro
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 2s, window: 10s }
+      resources:
+        limits: { cpus: '0.35', memory: 384M }
+        reservations: { cpus: '0.05', memory: 64M }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wartiket -d wartiket_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  db-shard3-replica:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/usr/local/bin/replica-entrypoint.sh"]
+    environment:
+      - PRIMARY_HOST=db-shard3-primary
+      - PRIMARY_PORT=5432
+      - DB_REPLICATOR_USER=replicator
+      - DB_REPLICATOR_PASSWORD=replicator_secret_2026
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - db-shard3-replica-data:/var/lib/postgresql/data
+      - ./db/replica-entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    networks:
+      - wartiket-net
+    deploy:
+      replicas: 1
+      restart_policy: { condition: any, delay: 3s, window: 15s }
+      resources:
+        limits: { cpus: '0.25', memory: 256M }
+        reservations: { cpus: '0.05', memory: 48M }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_reader -d wartiket_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
 
 networks:
   wartiket-net:
@@ -143,4 +461,10 @@ networks:
 
 volumes:
   redis-data:
-  db-data:
+  minio-data:
+  db-shard1-primary-data:
+  db-shard1-replica-data:
+  db-shard2-primary-data:
+  db-shard2-replica-data:
+  db-shard3-primary-data:
+  db-shard3-replica-data:

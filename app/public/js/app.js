@@ -7,10 +7,6 @@
 
 var stateReady = false;
 
-function getScale() {
-  return 1;
-}
-
 function isMobileViewport() {
   if (typeof window === 'undefined') return false;
   const cw = document.documentElement.clientWidth || window.innerWidth || 1440;
@@ -301,7 +297,7 @@ async function fetchConcerts({ force = false, render = isConcertsPage() } = {}) 
           price: 1500000,
           totalSeats: 500,
           availableSeats: 495,
-          imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=900&q=80',
+          imageUrl: '/cdn/img/poster-coldplay.svg',
         },
         {
           id: 2,
@@ -313,7 +309,7 @@ async function fetchConcerts({ force = false, render = isConcertsPage() } = {}) 
           price: 750000,
           totalSeats: 500,
           availableSeats: 497,
-          imageUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=900&q=80',
+          imageUrl: '/cdn/img/poster-sheila.svg',
         },
         {
           id: 3,
@@ -325,7 +321,7 @@ async function fetchConcerts({ force = false, render = isConcertsPage() } = {}) 
           price: 2250000,
           totalSeats: 500,
           availableSeats: 496,
-          imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=80',
+          imageUrl: '/cdn/img/poster-taylor.svg',
         },
       ];
     }
@@ -1725,6 +1721,11 @@ function resetLiveTestUI(quotas = null) {
 async function resetSystemStock(options = {}) {
   const { skipConfirm = false, sourceBtn = null } = options || {};
   if (state.isResetting) return;
+  if (!['admin', 'lecturer'].includes(String(state.currentUser?.role || '').toLowerCase())) {
+    showToast('Hanya akun Admin yang diizinkan mereset kuota. Silakan masuk sebagai Admin.', true);
+    openLoginModal();
+    return;
+  }
   if (!skipConfirm && !confirm('Reset seluruh kuota tiket, Redis locks, dan database ke kondisi awal?')) return;
 
   // Batalkan stress test yang masih berjalan agar tombol Mulai War Test & Reset Kuota tidak stuck

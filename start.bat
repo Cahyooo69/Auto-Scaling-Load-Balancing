@@ -50,7 +50,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo   - Membangun wartiket-nginx (Reverse Proxy & Ingress LB)...
+echo   - Membangun wartiket-nginx (Internal LB ^& CDN Edge Cache)...
 docker build -t wartiket-nginx:latest ./nginx >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Gagal mem-build image wartiket-nginx. Menampilkan log build:
@@ -58,12 +58,30 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+
+echo   - Membangun wartiket-waf (Layer 7 Web Application Firewall)...
+docker build -t wartiket-waf:latest -f waf/Dockerfile . >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Gagal mem-build image wartiket-waf. Menampilkan log build:
+    docker build -t wartiket-waf:latest -f waf/Dockerfile .
+    pause
+    exit /b 1
+)
+
+echo   - Membangun wartiket-honeypot (Intrusion Trap Service)...
+docker build -t wartiket-honeypot:latest ./honeypot >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Gagal mem-build image wartiket-honeypot. Menampilkan log build:
+    docker build -t wartiket-honeypot:latest ./honeypot
+    pause
+    exit /b 1
+)
 echo [OK] Seluruh image berhasil disiapkan.
 echo.
 
-:: 4. Deploy stack ke Docker Swarm
+:: 4. Deploy stack ke Docker Swarm (--prune menghapus service lama yg sudah tidak dipakai)
 echo [4/5] Menerapkan stack 'wartiket' ke Docker Swarm...
-docker stack deploy -c docker-compose.yml wartiket
+docker stack deploy --prune -c docker-compose.yml wartiket
 echo.
 
 :: 5. Tunggu inisialisasi awal & cek kesehatan layanan

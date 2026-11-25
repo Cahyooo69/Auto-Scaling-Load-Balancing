@@ -95,10 +95,12 @@ class CDPClient {
   }
 }
 
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'wartiket-admin-2026';
+
 async function resetDemoQuota() {
   const res = await fetch(`${BASE_URL}/api/tickets/reset`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_API_KEY },
     body: '{}',
   });
   assert.equal(res.status, 200, 'Reset quota API must return HTTP 200');
@@ -467,6 +469,15 @@ async function main() {
     await cdp.waitFor(`() => document.querySelectorAll('#ordersContent .orders-table tbody tr').length > 0`, 8000);
     const orderRowText = await cdp.eval(`document.querySelector('#ordersContent .orders-table tbody tr')?.textContent || ''`);
     assert.ok(orderRowText.includes('E-05') && orderRowText.includes('PAID'), `Order history must display booked E-05 PAID order, got "${orderRowText}"`);
+
+    // Switch to Admin account before Admin Live Stress Test & Reset Kuota (Least Privilege RBAC)
+    await cdp.eval(`(() => {
+      handleLogout();
+      document.getElementById('navBtnAuth').click();
+      autoFill('admin@wartiket.id', 'password123');
+      document.getElementById('btnLoginSubmit').click();
+    })()`);
+    await cdp.waitFor(`() => state?.currentUser?.email === 'admin@wartiket.id'`);
 
     await cdp.eval(`(document.querySelector('a[data-page="live-test"]') || document.querySelector('.nav-link[data-page="live-test"]')).click()`);
     await cdp.waitFor(`() => document.getElementById('page-live-test')?.classList.contains('is-active')`);

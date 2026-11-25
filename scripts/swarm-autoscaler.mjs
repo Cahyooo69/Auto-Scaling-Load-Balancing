@@ -14,8 +14,9 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'wartiket_app';
 const HEALTH_URL = process.env.HEALTH_URL || 'http://localhost/health';
 const MIN_REPLICAS = parseInt(process.env.MIN_REPLICAS || '2', 10);
 const MAX_REPLICAS = parseInt(process.env.MAX_REPLICAS || '8', 10);
-const SCALE_UP_CPU = parseFloat(process.env.SCALE_UP_CPU || '60');
-const SCALE_DOWN_CPU = parseFloat(process.env.SCALE_DOWN_CPU || '20');
+// Calibrated for 0.25 CPU container limit (~25% max in `docker stats`): 18% ≈ 72% load, 5% ≈ 20% load
+const SCALE_UP_CPU = parseFloat(process.env.SCALE_UP_CPU || '18');
+const SCALE_DOWN_CPU = parseFloat(process.env.SCALE_DOWN_CPU || '5');
 const SCALE_UP_LATENCY_MS = parseFloat(process.env.SCALE_UP_LATENCY_MS || '150');
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || '3000', 10);
 const RUN_ONCE = process.argv.includes('--once');

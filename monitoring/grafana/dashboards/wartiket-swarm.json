@@ -13,7 +13,7 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{image=~\"(docker.io/library/)?wartiket.*|redis.*\"}[30s]) * 100",
+          "expr": "rate(container_cpu_usage_seconds_total{image=~\"(docker.io/library/)?(wartiket.*|redis.*|postgres.*|edoburu/pgbouncer.*|(bitnamilegacy/|minio/)?minio.*)\"}[30s]) * 100",
           "legendFormat": "{{image}} ({{name}})"
         }
       ],
@@ -31,7 +31,7 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{image=~\"(docker.io/library/)?wartiket.*|redis.*\"} / 1024 / 1024",
+          "expr": "container_memory_usage_bytes{image=~\"(docker.io/library/)?(wartiket.*|redis.*|postgres.*|edoburu/pgbouncer.*|(bitnamilegacy/|minio/)?minio.*)\"} / 1024 / 1024",
           "legendFormat": "{{image}} ({{name}})"
         }
       ],
@@ -133,6 +133,29 @@
               { "color": "green", "value": null },
               { "color": "yellow", "value": 60 },
               { "color": "red", "value": 85 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Honeypot Intrusion Hits",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "sum(wartiket_honeypot_hits_total{path=\"ALL\"}) or vector(0)",
+          "legendFormat": "Trapped Probes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
             ]
           }
         }

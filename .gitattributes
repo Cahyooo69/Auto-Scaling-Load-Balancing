@@ -1,0 +1,5 @@
+# Enforce Unix LF line endings on container scripts & configs across Windows/Linux
+*.sh text eol=lf
+db/* text eol=lf
+nginx/*.conf text eol=lf
+waf/*.conf text eol=lf

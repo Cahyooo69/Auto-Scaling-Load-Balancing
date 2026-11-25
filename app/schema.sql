@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     concert_id INT REFERENCES concerts(id) ON DELETE SET NULL,
     total_amount NUMERIC(12,2) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PAID' CHECK (status IN ('PAID', 'PENDING', 'EXPIRED')),
+    expires_at TIMESTAMP WITH TIME ZONE,
     server_instance_id VARCHAR(100) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -85,4 +86,5 @@ CREATE TABLE IF NOT EXISTS booking_details (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_user_created ON bookings(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bookings_pending_expires ON bookings(expires_at) WHERE status = 'PENDING';
 CREATE INDEX IF NOT EXISTS idx_booking_details_booking ON booking_details(booking_id);

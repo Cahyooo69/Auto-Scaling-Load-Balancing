@@ -14,7 +14,8 @@ function extractSessionToken(req) {
   return req.query?.token ? String(req.query.token).trim() : '';
 }
 
-function createAuthController({ pool, redis, getDbReady, checkDbConnection, getRedisReady }) {
+function createAuthController({ pool, queryRead, redis, getDbReady, checkDbConnection, getRedisReady }) {
+  const execRead = queryRead || ((sql, params) => pool.query(sql, params));
   async function login(req, res) {
     const { email, password } = req.body || {};
     if (!email) {
@@ -41,7 +42,7 @@ function createAuthController({ pool, redis, getDbReady, checkDbConnection, getR
 
         if (getDbReady()) {
           try {
-            const q = await pool.query(
+            const q = await execRead(
               'SELECT id, name, email, password, phone, id_card, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
               [trimmedEmail]
             );
@@ -87,8 +88,8 @@ function createAuthController({ pool, redis, getDbReady, checkDbConnection, getR
         return res.status(401).json({ success: false, message: 'Pengguna tidak ditemukan. Silakan gunakan Auto-Fill Demo!' });
       }
 
-      // Password verification
-      if (password && user.password && user.password !== String(password)) {
+      // Password verification (reject missing or mismatched passwords)
+      if (user.password && user.password !== String(password || '')) {
         return res.status(401).json({ success: false, message: 'Kata sandi salah. Silakan coba lagi.' });
       }
 

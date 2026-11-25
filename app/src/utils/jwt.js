@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wartiket-cloud-jwt-secret-2026';
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'wartiket-admin-2026';
 
 function toBase64Url(input) {
   return Buffer.from(input).toString('base64url');
@@ -57,6 +58,15 @@ function extractJwtFromRequest(req) {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
+function attachOptionalJwt(req, _res, next) {
+  const token = extractJwtFromRequest(req);
+  const decoded = verifyJwt(token);
+  if (decoded && decoded.id) {
+    req.authUser = decoded;
+  }
+  return next();
+}
+
 function requireJwtAuth(req, res, next) {
   const token = extractJwtFromRequest(req);
   const decoded = verifyJwt(token);
@@ -70,10 +80,43 @@ function requireJwtAuth(req, res, next) {
   return next();
 }
 
+function hasValidAdminKey(req) {
+  const rawKey = String(req.headers['x-admin-key'] || '');
+  if (!rawKey || !ADMIN_API_KEY) return false;
+  const a = Buffer.from(rawKey);
+  const b = Buffer.from(ADMIN_API_KEY);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireAdminOrKey(req, res, next) {
+  if (hasValidAdminKey(req)) {
+    req.authUser = req.authUser || { id: 0, role: 'admin', email: 'ops@wartiket.id' };
+    return next();
+  }
+  const token = extractJwtFromRequest(req);
+  const decoded = verifyJwt(token);
+  if (!decoded || !decoded.id) {
+    return res.status(401).json({
+      success: false,
+      message: 'Akses ditolak: autentikasi Admin diperlukan untuk operasi ini.',
+    });
+  }
+  if (!['admin', 'lecturer'].includes(String(decoded.role || '').toLowerCase())) {
+    return res.status(403).json({
+      success: false,
+      message: 'Hak akses ditolak (Least Privilege): hanya akun Admin yang diizinkan.',
+    });
+  }
+  req.authUser = decoded;
+  return next();
+}
+
 module.exports = {
   signJwt,
   verifyJwt,
   extractJwtFromRequest,
+  attachOptionalJwt,
   requireJwtAuth,
+  requireAdminOrKey,
+  ADMIN_API_KEY,
 };
-

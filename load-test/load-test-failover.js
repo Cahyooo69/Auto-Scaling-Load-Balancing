@@ -1,14 +1,12 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Rate, Counter, Trend } from 'k6/metrics';
+import { Rate, Counter } from 'k6/metrics';
 
-// Status 200, 409 (Sold Out), dan 500 (Redis down) semua dilacak tanpa gagalkan k6
-http.setResponseCallback(http.expectedStatuses(200, 409, 500));
+// Status 200, 409 (Sold Out), dan 500/503 (Fail-safe saat Redis/DB down) dilacak tanpa membatalkan k6
+http.setResponseCallback(http.expectedStatuses(200, 409, 500, 503));
 
 export const failureRate = new Rate('server_failures');
-export const recoveryRequests = Counter('recovery_requests');
 export const failedDuringCrash = Counter('failed_during_crash');
-export const rtoTrend = new Trend('rto_detection_ms');
 
 export const options = {
   // 1.000 VU konstan selama 90 detik — container dibunuh di tengah-tengah oleh operator
@@ -46,7 +44,7 @@ export default function () {
 
   check(res, {
     'not a network error': (r) => r.status !== 0,
-    'valid business response': (r) => r.status === 200 || r.status === 409 || r.status === 500,
+    'valid business response': (r) => r.status === 200 || r.status === 409 || r.status === 500 || r.status === 503,
   });
 
   sleep(0.1);

@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Overlay monitoring stack — deploy SETELAH stack wartiket sudah running
 # Perintah: docker stack deploy -c docker-compose.monitoring.yml monitoring
 

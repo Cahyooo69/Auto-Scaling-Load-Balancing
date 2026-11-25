@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g1)"/>
+  <circle cx="960" cy="140" r="180" fill="#38bdf8" opacity="0.22"/>
+  <circle cx="220" cy="520" r="220" fill="#f472b6" opacity="0.2"/>
+  <text x="80" y="250" fill="#38bdf8" font-family="Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="4">WORLD TOUR JAKARTA 2026</text>
+  <text x="80" y="340" fill="#ffffff" font-family="Arial,sans-serif" font-size="76" font-weight="900">COLDPLAY</text>
+  <text x="80" y="405" fill="#e2e8f0" font-family="Arial,sans-serif" font-size="34" font-weight="600">Music of the Spheres &#8226; GBK Stadium</text>
+</svg>

@@ -1,6 +1,9 @@
 node_modules/
 .agents/
 .system_generated/
+.env
+*.env
+!.env.example
 *.log
 .DS_Store
 Thumbs.db

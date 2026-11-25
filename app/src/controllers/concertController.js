@@ -15,7 +15,7 @@ function getFallbackConcerts() {
       price: 1500000,
       totalSeats: 500,
       availableSeats: 495,
-      imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
+      imageUrl: '/cdn/img/poster-coldplay.svg',
       servedBy: os.hostname(),
     },
     {
@@ -27,7 +27,7 @@ function getFallbackConcerts() {
       price: 750000,
       totalSeats: 500,
       availableSeats: 497,
-      imageUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
+      imageUrl: '/cdn/img/poster-sheila.svg',
       servedBy: os.hostname(),
     },
     {
@@ -39,7 +39,7 @@ function getFallbackConcerts() {
       price: 2250000,
       totalSeats: 500,
       availableSeats: 496,
-      imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80',
+      imageUrl: '/cdn/img/poster-taylor.svg',
       servedBy: os.hostname(),
     },
   ];
@@ -65,7 +65,22 @@ function buildFallbackSeats(concertId) {
   return fallbackSeats;
 }
 
-function createConcertController({ pool, redis, getDbReady, checkDbConnection, getRedisReady }) {
+function createConcertController({
+  pool,
+  queryRead,
+  queryShardRead,
+  queryAllShardsRead,
+  getShardId,
+  DB_SHARD_COUNT = 1,
+  redis,
+  getDbReady,
+  checkDbConnection,
+  getRedisReady,
+}) {
+  const execRead = queryRead || ((sql, params) => pool.query(sql, params));
+  const execShardRead = queryShardRead || ((_cid, sql, params) => execRead(sql, params));
+  const resolveShardId = getShardId || (() => 1);
+
   async function getConcerts(req, res) {
     try {
       if (getRedisReady()) {
@@ -83,13 +98,30 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
 
       if (getDbReady()) {
         try {
-          const q = await pool.query(`
+          const sql = `
             SELECT id, title, artist, venue, concert_date, price, total_seats, available_seats, image_url
             FROM concerts
             ORDER BY id ASC
-          `);
-          if (q.rows.length > 0) {
-            const rows = q.rows.map((c) => ({
+          `;
+          let rawRows = [];
+          if (DB_SHARD_COUNT > 1 && queryAllShardsRead) {
+            const shardResults = await queryAllShardsRead(sql);
+            const byId = new Map();
+            for (const { shardId, rows } of shardResults) {
+              for (const r of rows) {
+                if (resolveShardId(r.id) === shardId || !byId.has(r.id)) {
+                  byId.set(r.id, { ...r, _shardId: resolveShardId(r.id) });
+                }
+              }
+            }
+            rawRows = Array.from(byId.values()).sort((a, b) => a.id - b.id);
+          } else {
+            const q = await execRead(sql);
+            rawRows = q.rows.map((r) => ({ ...r, _shardId: resolveShardId(r.id) }));
+          }
+
+          if (rawRows.length > 0) {
+            const rows = rawRows.map((c) => ({
               id: c.id,
               title: c.title,
               artist: c.artist,
@@ -99,6 +131,7 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
               totalSeats: c.total_seats,
               availableSeats: c.available_seats,
               imageUrl: c.image_url,
+              shardId: c._shardId,
               servedBy: os.hostname(),
             }));
             if (getRedisReady()) {
@@ -119,6 +152,7 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
 
   async function getConcertSeats(req, res) {
     const concertId = parseInt(req.params.id, 10) || 1;
+    const shardId = resolveShardId(concertId);
     const seatsCacheKey = `cache:concert:${concertId}:seats`;
     res.set('Cache-Control', 'no-store');
 
@@ -140,12 +174,16 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
 
         if (getDbReady()) {
           try {
-            const q = await pool.query(`
-              SELECT id, concert_id, seat_number, category, status, price
-              FROM seats
-              WHERE concert_id = $1 AND seat_number NOT LIKE 'FEST-%'
-              ORDER BY seat_number ASC
-            `, [concertId]);
+            const q = await execShardRead(
+              concertId,
+              `
+                SELECT id, concert_id, seat_number, category, status, price
+                FROM seats
+                WHERE concert_id = $1 AND seat_number NOT LIKE 'FEST-%'
+                ORDER BY seat_number ASC
+              `,
+              [concertId]
+            );
 
             if (q.rows.length > 0) {
               baseSeats = q.rows.map((s) => ({
@@ -168,6 +206,7 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
         const syncedSeats = await mergeRedisSeatLocks(concertId, baseSeats, redis, getRedisReady());
         return res.json({
           concertId,
+          shardId,
           seats: syncedSeats,
           servedBy: os.hostname(),
         });
@@ -175,12 +214,14 @@ function createConcertController({ pool, redis, getDbReady, checkDbConnection, g
 
       return res.json({
         concertId,
+        shardId,
         seats: await mergeRedisSeatLocks(concertId, buildFallbackSeats(concertId), redis, getRedisReady()),
         servedBy: os.hostname(),
       });
     } catch (err) {
       return res.json({
         concertId,
+        shardId,
         seats: await mergeRedisSeatLocks(concertId, buildFallbackSeats(concertId), redis, getRedisReady()),
         servedBy: os.hostname(),
       });

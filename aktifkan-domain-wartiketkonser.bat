@@ -30,6 +30,7 @@ echo [PROSES] Menambahkan 127.0.0.1 wartiketkonser.id ...
 echo. >> "%HOSTS_FILE%"
 echo 127.0.0.1 wartiketkonser.id >> "%HOSTS_FILE%"
 echo 127.0.0.1 www.wartiketkonser.id >> "%HOSTS_FILE%"
+echo 127.0.0.1 cdn.wartiketkonser.id >> "%HOSTS_FILE%"
 echo [SUKSES] Domain berhasil didaftarkan!
 
 :: Verifikasi berhasil ditulis
@@ -53,7 +54,7 @@ echo Isi hosts file yang ditambahkan:
 findstr /i "wartiketkonser" "%HOSTS_FILE%"
 echo.
 echo Langkah selanjutnya:
-echo 1. Pastikan Docker sudah running: docker-compose up -d
+echo 1. Pastikan Docker Swarm sudah running: .\start.bat
 echo 2. Buka browser, ketik: http://wartiketkonser.id
 echo    (untuk https, ketik: https://wartiketkonser.id dan klik "Advanced" lalu "Proceed")
 echo.

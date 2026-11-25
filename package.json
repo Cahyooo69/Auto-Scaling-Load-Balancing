@@ -12,7 +12,9 @@
     "status:containers": "docker stack ps wartiket",
     "test": "node test-quick.js",
     "test:unit": "node app/test.js",
-    "test:dr": "dr-test.bat"
+    "test:revised": "node tests/verify-revised-architecture.js",
+    "test:dr": "dr-test.bat",
+    "autoscaler": "node scripts/swarm-autoscaler.mjs"
   },
   "keywords": [
     "docker-swarm",

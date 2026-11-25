@@ -8,14 +8,15 @@
 const assert = require('node:assert/strict');
 
 const BASE_URL = (process.env.TARGET_URL || 'http://localhost').replace(/\/+$/, '');
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || 'wartiket-admin-2026';
 const CONCURRENT_USERS = 20;
 const TARGET_CONCERT_ID = 1;
 const TARGET_SEAT = 'E-05';
 
-async function postJson(path, payload) {
+async function postJson(path, payload, extraHeaders = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10000),
   });
@@ -31,7 +32,7 @@ async function postJson(path, payload) {
 
 async function run() {
   console.log(`[1/4] Resetting demo quota & locks at ${BASE_URL}/api/tickets/reset...`);
-  const reset = await postJson('/api/tickets/reset', {});
+  const reset = await postJson('/api/tickets/reset', {}, { 'X-Admin-Key': ADMIN_API_KEY });
   assert.equal(reset.status, 200, `Reset must return HTTP 200, got ${reset.status}`);
 
   console.log(`[2/4] Launching ${CONCURRENT_USERS} simultaneous checkouts for concert=${TARGET_CONCERT_ID}, seat=${TARGET_SEAT}...`);
@@ -80,7 +81,7 @@ async function run() {
   );
 
   console.log(`[4/4] Seat ${TARGET_SEAT} state verified as "${targetSeatState.status}". Restoring clean demo quota...`);
-  const cleanup = await postJson('/api/tickets/reset', {});
+  const cleanup = await postJson('/api/tickets/reset', {}, { 'X-Admin-Key': ADMIN_API_KEY });
   assert.equal(cleanup.status, 200, 'Final cleanup reset must return HTTP 200');
 
   console.log('PASS: Redis Atomic Lock enforced 0% overselling (1 winner / 19 conflicts).');

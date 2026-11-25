@@ -50,7 +50,19 @@ function sendSingleHttpPost(targetUrl, payloadStr, agent, attempt = 0) {
   });
 }
 
-function createBookingController({ pool, port, getDbReady, checkDbConnection }) {
+function createBookingController({
+  pool,
+  queryRead,
+  queryAllShardsRead,
+  getShardId,
+  DB_SHARD_COUNT = 1,
+  port,
+  getDbReady,
+  checkDbConnection,
+}) {
+  const execRead = queryRead || ((sql, params) => pool.query(sql, params));
+  const resolveShardId = getShardId || (() => 1);
+
   async function getMyOrders(req, res) {
     const userId = parseInt(req.authUser?.id, 10);
     if (!userId) {
@@ -67,13 +79,13 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
         });
       }
 
-      const q = await pool.query(
-        `
+      const sql = `
         SELECT
           b.id,
           b.booking_code,
           b.total_amount,
           b.status,
+          b.expires_at,
           b.server_instance_id,
           b.created_at,
           c.title AS concert_title,
@@ -89,13 +101,23 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
         WHERE b.user_id = $1
         ORDER BY b.created_at DESC
         LIMIT 50
-        `,
-        [userId]
-      );
+      `;
+
+      let rows = [];
+      if (DB_SHARD_COUNT > 1 && queryAllShardsRead) {
+        const shardResults = await queryAllShardsRead(sql, [userId]);
+        rows = shardResults
+          .flatMap(({ shardId, rows: rws }) => rws.map((r) => ({ ...r, _shardId: shardId })))
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, 50);
+      } else {
+        const q = await execRead(sql, [userId]);
+        rows = q.rows.map((r) => ({ ...r, _shardId: 1 }));
+      }
 
       return res.json({
         success: true,
-        orders: q.rows.map((r) => ({
+        orders: rows.map((r) => ({
           id: r.id,
           bookingCode: r.booking_code,
           concertTitle: r.concert_title || 'Konser Musik',
@@ -105,6 +127,8 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
           seatNumber: r.seat_number || '-',
           totalAmount: parseFloat(r.total_amount || 0),
           status: r.status || 'PAID',
+          expiresAt: r.expires_at || null,
+          shardId: r._shardId,
           serverInstanceId: r.server_instance_id,
           createdAt: r.created_at,
         })),
@@ -204,18 +228,36 @@ function createBookingController({ pool, port, getDbReady, checkDbConnection }) 
     let concertQuotas = [];
     if (getDbReady()) {
       try {
-        const qQuota = await pool.query(`
+        const quotaSql = `
           SELECT c.id, c.total_seats,
                  (SELECT COUNT(*)::int FROM seats s WHERE s.concert_id = c.id AND s.status = 'Available') AS available_seats
           FROM concerts c
           WHERE c.id <= 3
           ORDER BY c.id ASC
-        `);
-        concertQuotas = qQuota.rows.map((r) => ({
-          id: Number(r.id),
-          totalSeats: Number(r.total_seats || 500),
-          availableSeats: Number(r.available_seats || 0),
-        }));
+        `;
+        if (DB_SHARD_COUNT > 1 && queryAllShardsRead) {
+          const resShards = await queryAllShardsRead(quotaSql);
+          const mapQ = new Map();
+          for (const { shardId, rows } of resShards) {
+            for (const r of rows) {
+              if (resolveShardId(r.id) === shardId || !mapQ.has(r.id)) {
+                mapQ.set(r.id, {
+                  id: Number(r.id),
+                  totalSeats: Number(r.total_seats || 500),
+                  availableSeats: Number(r.available_seats || 0),
+                });
+              }
+            }
+          }
+          concertQuotas = Array.from(mapQ.values()).sort((a, b) => a.id - b.id);
+        } else {
+          const qQuota = await execRead(quotaSql);
+          concertQuotas = qQuota.rows.map((r) => ({
+            id: Number(r.id),
+            totalSeats: Number(r.total_seats || 500),
+            availableSeats: Number(r.available_seats || 0),
+          }));
+        }
       } catch {}
     }
 
